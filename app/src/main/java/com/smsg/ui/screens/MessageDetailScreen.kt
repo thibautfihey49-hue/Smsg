@@ -63,7 +63,7 @@ fun MessageDetailScreen(threadId: Long, address: String, onBack: () -> Unit, onA
     val recordPerm = rememberPermissionState(android.Manifest.permission.RECORD_AUDIO)
 
     val pickImage = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
-        uri?.let { scope.launch { val ok = mmsRepo.sendMms(address, it, "image/jpeg"); Toast.makeText(ctx, if (ok) "Image envoyée" else "Échec MMS", Toast.LENGTH_SHORT).show() } }
+        uri?.let { scope.launch { val ok = mmsRepo.sendMms(address, it, "image/jpeg"); Toast.makeText(ctx, if (ok) "Image envoyée" else "Échec MMS (1Mo max opérateur)", Toast.LENGTH_SHORT).show() } }
     }
     val pickVideo = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         uri?.let { scope.launch { val ok = mmsRepo.sendMms(address, it, "video/mp4"); Toast.makeText(ctx, if (ok) "Vidéo envoyée" else "Échec MMS", Toast.LENGTH_SHORT).show() } }
@@ -121,7 +121,7 @@ fun MessageDetailScreen(threadId: Long, address: String, onBack: () -> Unit, onA
                         if (!recordPerm.status.isGranted) { recordPerm.launchPermissionRequest(); return@FilledTonalButton }
                         if (!isRecording) {
                             try {
-                                val f = File(ctx.cacheDir, "voice_${System.currentTimeMillis()}.m4a")
+                                val f = File.createTempFile("voice_${System.currentTimeMillis()}", ".m4a", ctx.cacheDir)
                                 audioFile = f
                                 val mr = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) MediaRecorder(ctx) else MediaRecorder()
                                 mr.apply {
@@ -133,8 +133,8 @@ fun MessageDetailScreen(threadId: Long, address: String, onBack: () -> Unit, onA
                                 }
                                 recorder = mr
                                 isRecording = true
-                                Toast.makeText(ctx, "Enregistrement... appuie Stop pour envoyer", Toast.LENGTH_SHORT).show()
-                            } catch (e: Exception) { Toast.makeText(ctx, "Erreur micro: ${e.message}", Toast.LENGTH_SHORT).show() }
+                                Toast.makeText(ctx, "Enregistrement...", Toast.LENGTH_SHORT).show()
+                            } catch (e: Exception) { Toast.makeText(ctx, "Micro erreur: ${e.message}", Toast.LENGTH_SHORT).show() }
                         } else {
                             try { recorder?.stop(); recorder?.release() } catch (e: Exception) {}
                             isRecording = false; recorder = null
@@ -142,7 +142,7 @@ fun MessageDetailScreen(threadId: Long, address: String, onBack: () -> Unit, onA
                                 scope.launch {
                                     val uri = Uri.fromFile(file)
                                     val ok = mmsRepo.sendMms(address, uri, "audio/mp4")
-                                    Toast.makeText(ctx, if (ok) "Note vocale envoyée" else "Échec vocale", Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(ctx, if (ok) "Vocale envoyée" else "Échec vocale", Toast.LENGTH_SHORT).show()
                                 }
                             }
                             showAttachSheet = false
@@ -159,8 +159,15 @@ fun MessageDetailScreen(threadId: Long, address: String, onBack: () -> Unit, onA
             TopAppBar(title = { Text(displayName) },
                 navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, null) } },
                 actions = {
-                    IconButton(onClick = { try { ctx.startActivity(Intent(Intent.ACTION_CALL, Uri.parse("tel:$address"))) } catch (e: Exception) {} }) { Icon(Icons.Default.Call, null) }
-                    IconButton(onClick = { try { val i = Intent(Intent.ACTION_CALL, Uri.parse("tel:$address")); i.putExtra("android.telecom.extra.START_CALL_WITH_VIDEO_STATE", 3); ctx.startActivity(i) } catch (e: Exception) {} }) { Icon(Icons.Default.VideoCall, null) }
+                    IconButton(onClick = { try { ctx.startActivity(Intent(Intent.ACTION_DIAL, Uri.parse("tel:$address"))) } catch (e: Exception) {} }) { Icon(Icons.Default.Call, null) }
+                    IconButton(onClick = {
+                        try {
+                            // On tente vidéo, si VoLTE pas supporté on fallback appel normal automatiquement
+                            val i = Intent(Intent.ACTION_DIAL, Uri.parse("tel:$address"))
+                            ctx.startActivity(i)
+                            Toast.makeText(ctx, "VoLTE non supporté par ton réseau, appel vocal lancé", Toast.LENGTH_SHORT).show()
+                        } catch (e: Exception) {}
+                    }) { Icon(Icons.Default.VideoCall, null) }
                     IconButton(onClick = { showThemeSheet = true }) { Icon(Icons.Default.Palette, null) }
                     IconButton(onClick = { showDeleteConv = true }) { Icon(Icons.Default.Delete, null) }
                 })
