@@ -23,8 +23,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import com.smsg.data.model.Conversation
 import com.smsg.data.repository.SmsRepository
 import com.smsg.data.repository.ThemeRepository
@@ -39,9 +42,18 @@ fun ConversationListScreen(onConversationClick: (Long, String) -> Unit, onNewMes
     var convs by remember { mutableStateOf<List<Conversation>>(emptyList()) }
     var q by remember { mutableStateOf("") }
     var toDelete by remember { mutableStateOf<Conversation?>(null) }
+    var isDefault by remember { mutableStateOf(repo.isDefaultSmsApp()) }
     val scope = rememberCoroutineScope()
-    suspend fun load() { convs = repo.getConversations() }
+    val lifecycleOwner = LocalLifecycleOwner.current
+    suspend fun load() { convs = repo.getConversations(); isDefault = repo.isDefaultSmsApp() }
     LaunchedEffect(Unit) { load() }
+    DisposableEffect(lifecycleOwner) {
+        val lifecycleObserver = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) { isDefault = repo.isDefaultSmsApp(); scope.launch { load() } }
+        }
+        lifecycleOwner.lifecycle.addObserver(lifecycleObserver)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(lifecycleObserver) }
+    }
     DisposableEffect(Unit) {
         val observer = object : ContentObserver(Handler(Looper.getMainLooper())) { override fun onChange(selfChange: Boolean) { scope.launch { load() } } }
         ctx.contentResolver.registerContentObserver(Telephony.Sms.CONTENT_URI, true, observer)
@@ -57,6 +69,18 @@ fun ConversationListScreen(onConversationClick: (Long, String) -> Unit, onNewMes
     Scaffold(topBar = { TopAppBar(title = { Text("Messages") }, actions = { IconButton(onClick = onNewMessageClick) { Icon(Icons.Default.Contacts, null) } }) },
         floatingActionButton = { ExtendedFloatingActionButton(onClick = onNewMessageClick, icon = { Icon(Icons.Default.Contacts, null) }, text = { Text("Nouveau") }) }) { pad ->
         Column(Modifier.padding(pad).fillMaxSize()) {
+            if (!isDefault) {
+                Card(Modifier.fillMaxWidth().padding(12.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)) {
+                    Column(Modifier.padding(12.dp)) {
+                        Text("Pour recevoir les SMS instantanément, définis Smsg comme app par défaut.")
+                        Spacer(Modifier.height(8.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Button(onClick = { try { ctx.startActivity(repo.getDefaultIntent()) } catch (e: Exception) {} }) { Text("Essayer auto") }
+                            OutlinedButton(onClick = { try { ctx.startActivity(repo.getSettingsIntent()) } catch (e: Exception) {} }) { Text("Paramètres") }
+                        }
+                    }
+                }
+            }
             OutlinedTextField(value = q, onValueChange = { q = it }, modifier = Modifier.fillMaxWidth().padding(16.dp), placeholder = { Text("Rechercher") }, leadingIcon = { Icon(Icons.Default.Search, null) }, shape = MaterialTheme.shapes.extraLarge, singleLine = true)
             LazyColumn {
                 items(convs.filter { it.address.contains(q, true) || (it.contactName?.contains(q, true)?: false) }) { c ->
