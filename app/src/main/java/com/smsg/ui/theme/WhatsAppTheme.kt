@@ -2,9 +2,18 @@ package com.smsg.ui.theme
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
-val SignalBlue = Color(0xFF2C6BED); val SignalBlueLight = Color(0xFF3A76F0)
-val SignalBubbleMe = Color(0xFF2C6BED); val SignalBubbleOther = Color(0xFFE9E9EB)
-val SignalBg = Color(0xFFF6F6F6); val WaChatBg = SignalBg; val WaBubbleMe = SignalBubbleMe; val WaBubbleOther = SignalBubbleOther; val WaGreen = SignalBlue
+val GmBlue = Color(0xFF0B57D0)
+val GmBubbleMe = Color(0xFFD3E3FD)
+val GmBubbleOther = Color(0xFFF0F0F0)
+val GmBg = Color(0xFFF8F9FF)
+val SignalBlue = GmBlue
+val SignalBubbleMe = GmBubbleMe
+val SignalBubbleOther = GmBubbleOther
+val SignalBg = GmBg
+val WaChatBg = GmBg
+val WaBubbleMe = GmBubbleMe
+val WaBubbleOther = GmBubbleOther
+val WaGreen = GmBlue
 @Composable fun WhatsAppTheme(content: @Composable () -> Unit) {
-    MaterialTheme(colorScheme = lightColorScheme(primary = SignalBlue, secondary = SignalBlueLight, background = SignalBg), content = content)
+    MaterialTheme(colorScheme = lightColorScheme(primary = GmBlue, secondary = GmBlue, background = GmBg, surface = Color.White), content = content)
 }
