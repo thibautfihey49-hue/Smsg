@@ -40,10 +40,10 @@ import com.google.accompanist.permissions.rememberPermissionState
 import com.smsg.data.model.Message
 import com.smsg.data.repository.AttachmentRepository
 import com.smsg.data.repository.SmsRepository
-import com.smsg.ui.theme.WaBubbleMe
-import com.smsg.ui.theme.WaBubbleOther
-import com.smsg.ui.theme.WaChatBg
-import com.smsg.ui.theme.WaGreen
+import com.smsg.ui.theme.SignalBlue
+import com.smsg.ui.theme.SignalBubbleMe
+import com.smsg.ui.theme.SignalBubbleOther
+import com.smsg.ui.theme.SignalBg
 import kotlinx.coroutines.launch
 import java.io.File
 import java.text.SimpleDateFormat
@@ -68,7 +68,7 @@ fun MessageDetailScreen(threadId: Long, address: String, onBack: () -> Unit, onA
     val scope = rememberCoroutineScope()
     val recordPerm = rememberPermissionState(android.Manifest.permission.RECORD_AUDIO)
     val pickImage = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
-        uri?.let { try { val f = attachRepo.copyToInternal(it, "${realThreadId}_img", "jpg"); localFiles = localFiles + f; Toast.makeText(ctx, "Image ajoutée", Toast.LENGTH_SHORT).show() } catch (e: Exception) {} }
+        uri?.let { try { val f = attachRepo.copyToInternal(it, "${realThreadId}_img", "jpg"); localFiles = localFiles + f } catch (e: Exception) {} }
     }
     suspend fun refresh() {
         realThreadId = if (threadId == 0L) repo.getOrCreateThreadId(address) else threadId
@@ -84,31 +84,37 @@ fun MessageDetailScreen(threadId: Long, address: String, onBack: () -> Unit, onA
         ctx.registerReceiver(br, IntentFilter("com.smsg.NEW_SMS"), Context.RECEIVER_NOT_EXPORTED)
         onDispose { ctx.contentResolver.unregisterContentObserver(observer); ctx.unregisterReceiver(br); player?.release() }
     }
-    Scaffold(containerColor = WaChatBg,
+    Scaffold(containerColor = SignalBg,
         topBar = {
             TopAppBar(title = {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Surface(Modifier.size(36.dp).clip(CircleShape), color = Color.Gray) { Box(contentAlignment = Alignment.Center) { Text(displayName.firstOrNull()?.toString() ?: "?", color = Color.White) } }
-                    Spacer(Modifier.width(8.dp)); Column { Text(displayName, color = Color.White); Text("appuie pour infos", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(0.8f)) }
+                    Surface(Modifier.size(36.dp).clip(CircleShape), color = SignalBlue) { Box(contentAlignment = Alignment.Center){ Text(displayName.firstOrNull()?.toString()?.uppercase() ?: "?", color = Color.White) } }
+                    Spacer(Modifier.width(8.dp))
+                    Column { Text(displayName, style = MaterialTheme.typography.titleMedium, color = Color.White); Text("Chiffrement de bout en bout • SMS", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(0.8f)) }
                 }
-            }, navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, null, tint = Color.White) } },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = WaGreen),
-                actions = { IconButton(onClick = { ctx.startActivity(Intent(Intent.ACTION_DIAL, Uri.parse("tel:$address"))) }) { Icon(Icons.Default.Call, null, tint = Color.White) } })
+            }, navigationIcon = { IconButton(onClick = onBack){ Icon(Icons.Default.ArrowBack, null, tint = Color.White) } },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = SignalBlue),
+                actions = {
+                    IconButton(onClick = { ctx.startActivity(Intent(Intent.ACTION_DIAL, Uri.parse("tel:$address"))) }) { Icon(Icons.Default.Call, null, tint = Color.White) }
+                    IconButton(onClick = {}) { Icon(Icons.Default.MoreVert, null, tint = Color.White) }
+                })
         },
         bottomBar = {
             Column {
                 if (showAttach) {
                     Row(Modifier.fillMaxWidth().background(Color.White).padding(12.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
-                        FilledTonalButton(onClick = { showAttach = false; pickImage.launch("image/*") }) { Icon(Icons.Default.Image, null); Text(" Image") }
-                        FilledTonalButton(onClick = { Toast.makeText(ctx, "Document bientôt", Toast.LENGTH_SHORT).show() }) { Icon(Icons.Default.Description, null); Text(" Fichier") }
+                        FilledTonalButton(onClick = { showAttach = false; pickImage.launch("image/*") }) { Icon(Icons.Default.Image, null); Text(" Galerie") }
+                        FilledTonalButton(onClick = { pickImage.launch("image/*") }) { Icon(Icons.Default.PhotoCamera, null); Text(" Caméra") }
+                        FilledTonalButton(onClick = {}) { Icon(Icons.Default.LocationOn, null); Text(" Lieu") }
                     }
                 }
                 Row(Modifier.fillMaxWidth().padding(8.dp).imePadding(), verticalAlignment = Alignment.Bottom) {
-                    Surface(shape = RoundedCornerShape(24.dp), color = Color.White, modifier = Modifier.weight(1f)) {
-                        Row(verticalAlignment = Alignment.Bottom, modifier = Modifier.padding(4.dp)) {
+                    Surface(shape = RoundedCornerShape(24.dp), color = Color.White, modifier = Modifier.weight(1f).heightIn(min = 48.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 4.dp)) {
                             IconButton(onClick = {}) { Icon(Icons.Default.EmojiEmotions, null, tint = Color.Gray) }
-                            OutlinedTextField(value = input, onValueChange = { input = it }, modifier = Modifier.weight(1f), placeholder = { Text("Message") }, colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Color.Transparent, unfocusedBorderColor = Color.Transparent))
+                            OutlinedTextField(value = input, onValueChange = { input = it }, modifier = Modifier.weight(1f), placeholder = { Text("Message Signal") }, colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Color.Transparent, unfocusedBorderColor = Color.Transparent), maxLines = 4)
                             IconButton(onClick = { showAttach = !showAttach }) { Icon(Icons.Default.AttachFile, null, tint = Color.Gray) }
+                            IconButton(onClick = { pickImage.launch("image/*") }) { Icon(Icons.Default.PhotoCamera, null, tint = Color.Gray) }
                         }
                     }
                     Spacer(Modifier.width(8.dp))
@@ -126,10 +132,10 @@ fun MessageDetailScreen(threadId: Long, address: String, onBack: () -> Unit, onA
                             } else {
                                 try { recorder?.stop(); recorder?.release() } catch (e: Exception) {}
                                 isRecording = false
-                                audioFile?.let { tmp -> val dest = File(ctx.filesDir, "${realThreadId}_voice_${System.currentTimeMillis()}.m4a"); tmp.copyTo(dest, true); localFiles = localFiles + dest; Toast.makeText(ctx, "Note vocale enregistrée", Toast.LENGTH_SHORT).show() }
+                                audioFile?.let { tmp -> val dest = File(ctx.filesDir, "${realThreadId}_voice_${System.currentTimeMillis()}.m4a"); tmp.copyTo(dest, true); localFiles = localFiles + dest; Toast.makeText(ctx, "Message vocal", Toast.LENGTH_SHORT).show() }
                             }
                         }
-                    }, modifier = Modifier.size(48.dp), colors = IconButtonDefaults.filledIconButtonColors(containerColor = WaGreen)) {
+                    }, modifier = Modifier.size(48.dp), colors = IconButtonDefaults.filledIconButtonColors(containerColor = SignalBlue)) {
                         Icon(if (input.isNotBlank()) Icons.Default.Send else if (isRecording) Icons.Default.Stop else Icons.Default.Mic, null, tint = Color.White)
                     }
                 }
@@ -137,11 +143,14 @@ fun MessageDetailScreen(threadId: Long, address: String, onBack: () -> Unit, onA
         }
     ) { pad ->
         LazyColumn(Modifier.padding(pad).fillMaxSize().padding(8.dp)) {
+            item { Surface(shape = RoundedCornerShape(8.dp), color = Color(0xFFFFF9C4), modifier = Modifier.align(Alignment.CenterHorizontally).padding(8.dp)) { Text("🔒 Messages chiffrés de bout en bout • Mode SMS", style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(8.dp)) } }
             items(msgs) { m ->
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = if (m.isMe) Arrangement.End else Arrangement.Start) {
-                    Surface(shape = RoundedCornerShape(12.dp), color = if (m.isMe) WaBubbleMe else WaBubbleOther, shadowElevation = 1.dp, modifier = Modifier.widthIn(max = 280.dp)) {
-                        Column(Modifier.padding(8.dp)) {
-                            Text(m.body); Text(SimpleDateFormat("HH:mm").format(Date(m.date)), style = MaterialTheme.typography.labelSmall, color = Color.Gray, modifier = Modifier.align(Alignment.End))
+                val isMe = m.isMe
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = if (isMe) Arrangement.End else Arrangement.Start) {
+                    Surface(shape = RoundedCornerShape(18.dp), color = if (isMe) SignalBubbleMe else SignalBubbleOther, shadowElevation = 0.5.dp, modifier = Modifier.widthIn(max = 280.dp)) {
+                        Column(Modifier.padding(10.dp)) {
+                            Text(m.body, color = if (isMe) Color.White else Color.Black)
+                            Text(SimpleDateFormat("HH:mm").format(Date(m.date)), style = MaterialTheme.typography.labelSmall, color = if (isMe) Color.White.copy(0.7f) else Color.Gray, modifier = Modifier.align(Alignment.End))
                         }
                     }
                 }
@@ -152,13 +161,13 @@ fun MessageDetailScreen(threadId: Long, address: String, onBack: () -> Unit, onA
                     when {
                         file.name.contains("_img") -> {
                             val bmp = remember(file.absolutePath) { try { BitmapFactory.decodeFile(file.absolutePath)?.asImageBitmap() } catch (e: Exception) { null } }
-                            if (bmp != null) Surface(shape = RoundedCornerShape(12.dp), shadowElevation = 1.dp) { Image(bmp, null, Modifier.size(240.dp).clip(RoundedCornerShape(12.dp)), contentScale = ContentScale.Crop) }
+                            if (bmp != null) Image(bmp, null, Modifier.size(240.dp).clip(RoundedCornerShape(12.dp)), contentScale = androidx.compose.ui.layout.ContentScale.Crop)
                         }
                         file.name.contains("_voice") -> {
-                            Surface(shape = RoundedCornerShape(12.dp), color = WaBubbleMe, shadowElevation = 1.dp, modifier = Modifier.width(260.dp)) {
+                            Surface(shape = RoundedCornerShape(18.dp), color = SignalBubbleMe, modifier = Modifier.width(260.dp)) {
                                 Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                                    FilledIconButton(onClick = { try { player?.release(); player = MediaPlayer().apply { setDataSource(file.absolutePath); prepare(); start() } } catch (e: Exception) {} }, colors = IconButtonDefaults.filledIconButtonColors(containerColor = WaGreen)) { Icon(Icons.Default.PlayArrow, null, tint = Color.White) }
-                                    Spacer(Modifier.width(8.dp)); Text("Note vocale", style = MaterialTheme.typography.bodySmall)
+                                    FilledIconButton(onClick = { try { player?.release(); player = MediaPlayer().apply { setDataSource(file.absolutePath); prepare(); start() } } catch (e: Exception) {} }, colors = IconButtonDefaults.filledIconButtonColors(containerColor = Color.White), modifier = Modifier.size(36.dp)) { Icon(Icons.Default.PlayArrow, null, tint = SignalBlue) }
+                                    Spacer(Modifier.width(8.dp)); Text("Message vocal", color = Color.White, style = MaterialTheme.typography.bodySmall)
                                 }
                             }
                         }

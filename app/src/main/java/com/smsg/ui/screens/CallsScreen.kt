@@ -1,7 +1,6 @@
 package com.smsg.ui.screens
 import android.content.Intent
 import android.net.Uri
-import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
@@ -14,9 +13,9 @@ import com.smsg.data.model.Conversation
 @Composable
 fun CallsScreen(convs: List<Conversation>) {
     val ctx = LocalContext.current
-    LazyColumn(Modifier.fillMaxSize()) {
+    LazyColumn(Modifier) {
         items(convs) { c ->
-            ListItem(headlineContent = { Text(c.contactName ?: c.address) }, supportingContent = { Text("Appel vocal") },
+            ListItem(headlineContent = { Text(c.contactName ?: c.address) }, supportingContent = { Text("Appel vocal Signal • Sécurisé") },
                 trailingContent = { IconButton(onClick = { ctx.startActivity(Intent(Intent.ACTION_DIAL, Uri.parse("tel:${c.address}"))) }) { Icon(Icons.Default.Call, null) } })
             Divider()
         }
