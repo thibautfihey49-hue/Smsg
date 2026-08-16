@@ -1,40 +1,39 @@
 package com.smsg.ui.navigation
-import androidx.compose.runtime.Composable
-import androidx.navigation.NavType
+import androidx.compose.runtime.*
+import androidx.compose.ui.platform.LocalContext
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
-import androidx.navigation.navArgument
-import com.smsg.ui.screens.AddContactScreen
-import com.smsg.ui.screens.ContactsScreen
-import com.smsg.ui.screens.ConversationListScreen
-import com.smsg.ui.screens.MessageDetailScreen
+import com.smsg.ui.screens.*
+import java.io.File
 
 @Composable
-fun SmsgNavHost() {
+fun AppNavHost() {
     val nav = rememberNavController()
-    NavHost(nav, "list") {
-        composable("list") {
-            ConversationListScreen(
-                onConversationClick = { id, a -> nav.navigate("detail/$id/$a") },
-                onNewMessageClick = { nav.navigate("contacts") },
-                onAddContactClick = { num -> nav.navigate("add_contact/$num") }
+    val ctx = LocalContext.current
+    NavHost(navController = nav, startDestination = "whatsapp") {
+        composable("whatsapp") {
+            var convs by remember { mutableStateOf(listOf<com.smsg.data.model.Conversation>()) }
+            WhatsAppMainScreen(
+                chatContent = {
+                    ConversationListScreen(
+                        onConversationClick = { id, addr -> nav.navigate("chat/$id/$addr") },
+                        onNewMessageClick = { nav.navigate("new") },
+                        onAddContactClick = {}
+                    )
+                },
+                statusContent = { StatusScreen(filesDir = ctx.filesDir, onAddStatus = {}) },
+                commuContent = { CallsScreen(convs = convs) },
+                callsContent = { CallsScreen(convs = convs) }
             )
         }
-        composable("detail/{threadId}/{address}", arguments = listOf(navArgument("threadId") { type = NavType.LongType }, navArgument("address") { type = NavType.StringType })) {
-            val tid = it.arguments?.getLong("threadId") ?: 0L
-            val addr = it.arguments?.getString("address") ?: ""
-            MessageDetailScreen(tid, addr, onBack = { nav.popBackStack() }, onAddContact = { num -> nav.navigate("add_contact/$num") })
+        composable("chat/{id}/{addr}") { backStack ->
+            val id = backStack.arguments?.getString("id")?.toLong() ?: 0L
+            val addr = backStack.arguments?.getString("addr") ?: ""
+            MessageDetailScreen(threadId = id, address = addr, onBack = { nav.popBackStack() }, onAddContact = {})
         }
-        composable("contacts") {
-            ContactsScreen(onBack = { nav.popBackStack() }, onContactClick = { c -> c.numbers.firstOrNull()?.let { num -> nav.navigate("detail/0/$num") } }, onAddContact = { nav.navigate("add_contact_empty") })
-        }
-        composable("add_contact_empty") {
-            AddContactScreen(initialPhone = "", onBack = { nav.popBackStack() }, onSaved = { nav.popBackStack() })
-        }
-        composable("add_contact/{phone}", arguments = listOf(navArgument("phone") { type = NavType.StringType })) {
-            val phone = it.arguments?.getString("phone") ?: ""
-            AddContactScreen(initialPhone = phone, onBack = { nav.popBackStack() }, onSaved = { nav.popBackStack() })
+        composable("new") {
+            NewConversationScreen(onConversationCreated = { id, addr -> nav.navigate("chat/$id/$addr") { popUpTo("whatsapp") } }, onBack = { nav.popBackStack() })
         }
     }
 }

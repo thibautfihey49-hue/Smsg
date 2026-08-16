@@ -15,19 +15,21 @@ import android.provider.Telephony
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -35,16 +37,20 @@ import androidx.compose.ui.unit.dp
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.isGranted
 import com.google.accompanist.permissions.rememberPermissionState
-import com.smsg.data.model.ChatThemes
 import com.smsg.data.model.Message
 import com.smsg.data.repository.AttachmentRepository
-import com.smsg.data.repository.ContactsRepository
 import com.smsg.data.repository.SmsRepository
 import com.smsg.data.repository.ThemeRepository
+import com.smsg.ui.theme.WaBubbleMe
+import com.smsg.ui.theme.WaBubbleOther
+import com.smsg.ui.theme.WaChatBg
+import com.smsg.ui.theme.WaGreen
 import kotlinx.coroutines.launch
 import java.io.File
+import java.text.SimpleDateFormat
+import java.util.Date
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class, ExperimentalPermissionsApi::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalPermissionsApi::class)
 @Composable
 fun MessageDetailScreen(threadId: Long, address: String, onBack: () -> Unit, onAddContact: (String) -> Unit) {
     val ctx = LocalContext.current
@@ -56,25 +62,19 @@ fun MessageDetailScreen(threadId: Long, address: String, onBack: () -> Unit, onA
     var input by remember { mutableStateOf("") }
     var displayName by remember { mutableStateOf(address) }
     var realThreadId by remember { mutableStateOf(threadId) }
-    var theme by remember { mutableStateOf(themeRepo.getTheme(address)) }
-    var showAttachSheet by remember { mutableStateOf(false) }
-    var showThemeSheet by remember { mutableStateOf(false) }
+    var showAttach by remember { mutableStateOf(false) }
     var isRecording by remember { mutableStateOf(false) }
     var recorder by remember { mutableStateOf<MediaRecorder?>(null) }
     var audioFile by remember { mutableStateOf<File?>(null) }
     var player by remember { mutableStateOf<MediaPlayer?>(null) }
     val scope = rememberCoroutineScope()
     val recordPerm = rememberPermissionState(android.Manifest.permission.RECORD_AUDIO)
-    val imagePerm = if (Build.VERSION.SDK_INT >= 33) rememberPermissionState(android.Manifest.permission.READ_MEDIA_IMAGES) else rememberPermissionState(android.Manifest.permission.READ_EXTERNAL_STORAGE)
     val pickImage = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
-        uri?.let {
-            try { val f = attachRepo.copyToInternal(it, "${realThreadId}_img", "jpg"); localFiles = localFiles + f; Toast.makeText(ctx, "Image ajoutée", Toast.LENGTH_SHORT).show() } catch (e: Exception) {}
-        }
+        uri?.let { try { val f = attachRepo.copyToInternal(it, "${realThreadId}_img", "jpg"); localFiles = localFiles + f } catch (e: Exception) {} }
     }
     suspend fun refresh() {
         realThreadId = if (threadId == 0L) repo.getOrCreateThreadId(address) else threadId
         displayName = repo.getContactName(address) ?: address
-        theme = themeRepo.getTheme(address)
         msgs = repo.getMessagesForThread(realThreadId, address)
         localFiles = ctx.filesDir.listFiles()?.filter { it.name.startsWith(realThreadId.toString()) }?.sortedBy { it.lastModified() } ?: emptyList()
     }
@@ -86,88 +86,111 @@ fun MessageDetailScreen(threadId: Long, address: String, onBack: () -> Unit, onA
         ctx.registerReceiver(br, IntentFilter("com.smsg.NEW_SMS"), Context.RECEIVER_NOT_EXPORTED)
         onDispose { ctx.contentResolver.unregisterContentObserver(observer); ctx.unregisterReceiver(br); player?.release() }
     }
-    Scaffold(containerColor = theme.bg,
+
+    Scaffold(
+        containerColor = WaChatBg,
         topBar = {
-            TopAppBar(title = { Text(displayName) }, navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, null) } },
+            TopAppBar(
+                title = {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Surface(Modifier.size(36.dp).clip(CircleShape), color = Color.LightGray) { Box(contentAlignment = Alignment.Center) { Text(displayName.firstOrNull()?.toString() ?: "?", color = Color.White) } }
+                        Spacer(Modifier.width(8.dp))
+                        Column { Text(displayName, style = MaterialTheme.typography.titleMedium, color = Color.White); Text("en ligne", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.8f)) }
+                    }
+                },
+                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, null, tint = Color.White) } },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = WaGreen),
                 actions = {
-                    IconButton(onClick = { ctx.startActivity(Intent(Intent.ACTION_DIAL, Uri.parse("tel:$address"))) }) { Icon(Icons.Default.Call, null) }
-                    IconButton(onClick = { showThemeSheet = true }) { Icon(Icons.Default.Palette, null) }
-                })
+                    IconButton(onClick = { ctx.startActivity(Intent(Intent.ACTION_DIAL, Uri.parse("tel:$address"))) }) { Icon(Icons.Default.Call, null, tint = Color.White) }
+                    IconButton(onClick = { ctx.startActivity(Intent(Intent.ACTION_DIAL, Uri.parse("tel:$address"))) }) { Icon(Icons.Default.Videocam, null, tint = Color.White) }
+                    IconButton(onClick = {}) { Icon(Icons.Default.MoreVert, null, tint = Color.White) }
+                }
+            )
         },
         bottomBar = {
-            Row(Modifier.fillMaxWidth().padding(12.dp).imePadding(), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-                IconButton(onClick = { if (!imagePerm.status.isGranted) imagePerm.launchPermissionRequest(); showAttachSheet = true }) { Icon(Icons.Default.AttachFile, null) }
-                OutlinedTextField(value = input, onValueChange = { input = it }, modifier = Modifier.weight(1f), placeholder = { Text("Message") }, shape = RoundedCornerShape(24.dp))
-                Spacer(Modifier.width(8.dp))
-                FilledIconButton(onClick = { if (input.isNotBlank()) { repo.sendSms(address, input); input = ""; scope.launch { refresh() } } }, colors = IconButtonDefaults.filledIconButtonColors(containerColor = theme.me)) { Icon(Icons.Default.Send, null) }
+            Column {
+                if (showAttach) {
+                    Row(Modifier.fillMaxWidth().background(Color.White).padding(16.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
+                        FilledTonalButton(onClick = { showAttach = false; pickImage.launch("image/*") }) { Icon(Icons.Default.Image, null); Text(" Galerie") }
+                        FilledTonalButton(onClick = { Toast.makeText(ctx, "Caméra bientôt", Toast.LENGTH_SHORT).show() }) { Icon(Icons.Default.PhotoCamera, null); Text(" Caméra") }
+                        FilledTonalButton(onClick = { Toast.makeText(ctx, "Document bientôt", Toast.LENGTH_SHORT).show() }) { Icon(Icons.Default.Description, null); Text(" Doc") }
+                    }
+                }
+                Row(Modifier.fillMaxWidth().padding(8.dp).imePadding(), verticalAlignment = Alignment.Bottom) {
+                    Surface(shape = RoundedCornerShape(24.dp), color = Color.White, modifier = Modifier.weight(1f)) {
+                        Row(verticalAlignment = Alignment.Bottom, modifier = Modifier.padding(horizontal = 4.dp)) {
+                            IconButton(onClick = {}) { Icon(Icons.Default.EmojiEmotions, null, tint = Color.Gray) }
+                            OutlinedTextField(value = input, onValueChange = { input = it }, modifier = Modifier.weight(1f), placeholder = { Text("Message") }, colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Color.Transparent, unfocusedBorderColor = Color.Transparent), maxLines = 5)
+                            IconButton(onClick = { showAttach = !showAttach }) { Icon(Icons.Default.AttachFile, null, tint = Color.Gray) }
+                            IconButton(onClick = {}) { Icon(Icons.Default.PhotoCamera, null, tint = Color.Gray) }
+                        }
+                    }
+                    Spacer(Modifier.width(8.dp))
+                    FilledIconButton(onClick = {
+                        if (!recordPerm.status.isGranted) { recordPerm.launchPermissionRequest(); return@FilledIconButton }
+                        if (input.isNotBlank()) {
+                            repo.sendSms(address, input); input = ""; scope.launch { refresh() }
+                        } else {
+                            if (!isRecording) {
+                                try {
+                                    val f = File.createTempFile("${realThreadId}_voice_", ".m4a", ctx.cacheDir)
+                                    audioFile = f
+                                    val mr = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) MediaRecorder(ctx) else MediaRecorder()
+                                    mr.apply { setAudioSource(MediaRecorder.AudioSource.MIC); setOutputFormat(MediaRecorder.OutputFormat.MPEG_4); setAudioEncoder(MediaRecorder.AudioEncoder.AAC); setOutputFile(f.absolutePath); prepare(); start() }
+                                    recorder = mr; isRecording = true; Toast.makeText(ctx, "Enregistrement...", Toast.LENGTH_SHORT).show()
+                                } catch (e: Exception) {}
+                            } else {
+                                try { recorder?.stop(); recorder?.release() } catch (e: Exception) {}
+                                isRecording = false
+                                audioFile?.let { tmp -> val dest = File(ctx.filesDir, "${realThreadId}_voice_${System.currentTimeMillis()}.m4a"); tmp.copyTo(dest, true); localFiles = localFiles + dest }
+                            }
+                        }
+                    }, modifier = Modifier.size(48.dp), colors = IconButtonDefaults.filledIconButtonColors(containerColor = WaGreen)) {
+                        Icon(if (input.isNotBlank()) Icons.Default.Send else if (isRecording) Icons.Default.Stop else Icons.Default.Mic, null, tint = Color.White)
+                    }
+                }
             }
         }
     ) { pad ->
-        LazyColumn(Modifier.padding(pad).fillMaxSize().padding(12.dp)) {
+        LazyColumn(Modifier.padding(pad).fillMaxSize().padding(8.dp)) {
             items(msgs) { m ->
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = if (m.isMe) Arrangement.End else Arrangement.Start) {
-                    Surface(shape = RoundedCornerShape(18.dp), color = if (m.isMe) theme.me else theme.other, modifier = Modifier.widthIn(max = 300.dp)) {
-                        Text(m.body, Modifier.padding(12.dp), color = if (m.isMe) androidx.compose.ui.graphics.Color.White else androidx.compose.ui.graphics.Color.Black)
+                val isMe = m.isMe
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = if (isMe) Arrangement.End else Arrangement.Start) {
+                    Surface(shape = RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp, bottomStart = if (isMe) 12.dp else 0.dp, bottomEnd = if (isMe) 0.dp else 12.dp), color = if (isMe) WaBubbleMe else WaBubbleOther, shadowElevation = 1.dp, modifier = Modifier.widthIn(max = 280.dp)) {
+                        Column(Modifier.padding(8.dp)) {
+                            Text(m.body, style = MaterialTheme.typography.bodyMedium)
+                            Row(Modifier.align(Alignment.End), verticalAlignment = Alignment.CenterVertically) {
+                                Text(SimpleDateFormat("HH:mm").format(Date(m.date)), style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+                                if (isMe) { Spacer(Modifier.width(4.dp)); Text("✓✓", color = Color(0xFF53BDEB), style = MaterialTheme.typography.labelSmall) }
+                            }
+                        }
                     }
                 }
-                Spacer(Modifier.height(6.dp))
+                Spacer(Modifier.height(4.dp))
             }
             items(localFiles) { file ->
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                     when {
                         file.name.contains("_img") -> {
                             val bmp = remember(file.absolutePath) { try { BitmapFactory.decodeFile(file.absolutePath)?.asImageBitmap() } catch (e: Exception) { null } }
-                            if (bmp != null) Image(bitmap = bmp, contentDescription = null, modifier = Modifier.size(220.dp).clip(RoundedCornerShape(16.dp)), contentScale = ContentScale.Crop)
+                            if (bmp != null) {
+                                Surface(shape = RoundedCornerShape(12.dp), shadowElevation = 1.dp) {
+                                    Image(bitmap = bmp, contentDescription = null, modifier = Modifier.size(240.dp).clip(RoundedCornerShape(12.dp)), contentScale = ContentScale.Crop)
+                                }
+                            }
                         }
                         file.name.contains("_voice") -> {
-                            FilledTonalButton(onClick = {
-                                try { player?.release(); player = MediaPlayer().apply { setDataSource(file.absolutePath); prepare(); start() } } catch (e: Exception) {}
-                            }) { Icon(Icons.Default.PlayArrow, null); Spacer(Modifier.width(8.dp)); Text("Vocale") }
+                            Surface(shape = RoundedCornerShape(12.dp), color = WaBubbleMe, shadowElevation = 1.dp, modifier = Modifier.width(260.dp)) {
+                                Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    FilledIconButton(onClick = { try { player?.release(); player = MediaPlayer().apply { setDataSource(file.absolutePath); prepare(); start() } } catch (e: Exception) {} }, colors = IconButtonDefaults.filledIconButtonColors(containerColor = WaGreen)) { Icon(Icons.Default.PlayArrow, null, tint = Color.White) }
+                                    Spacer(Modifier.width(8.dp))
+                                    Column(Modifier.weight(1f)) { LinearProgressIndicator(progress = 0.3f, modifier = Modifier.fillMaxWidth()); Text("0:12", style = MaterialTheme.typography.labelSmall, color = Color.Gray) }
+                                }
+                            }
                         }
                     }
                 }
-                Spacer(Modifier.height(8.dp))
-            }
-        }
-    }
-    if (showAttachSheet) {
-        ModalBottomSheet(onDismissRequest = { showAttachSheet = false }) {
-            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                    FilledTonalButton(onClick = { showAttachSheet = false; pickImage.launch("image/*") }) { Icon(Icons.Default.Image, null); Text(" Image") }
-                }
-                FilledTonalButton(modifier = Modifier.fillMaxWidth(), onClick = {
-                    if (!recordPerm.status.isGranted) { recordPerm.launchPermissionRequest(); return@FilledTonalButton }
-                    if (!isRecording) {
-                        try {
-                            val f = File.createTempFile("${realThreadId}_voice_", ".m4a", ctx.cacheDir)
-                            audioFile = f
-                            val mr = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) MediaRecorder(ctx) else MediaRecorder()
-                            mr.apply { setAudioSource(MediaRecorder.AudioSource.MIC); setOutputFormat(MediaRecorder.OutputFormat.MPEG_4); setAudioEncoder(MediaRecorder.AudioEncoder.AAC); setOutputFile(f.absolutePath); prepare(); start() }
-                            recorder = mr; isRecording = true
-                        } catch (e: Exception) {}
-                    } else {
-                        try { recorder?.stop(); recorder?.release() } catch (e: Exception) {}
-                        isRecording = false
-                        audioFile?.let { tmp ->
-                            val dest = File(ctx.filesDir, "${realThreadId}_voice_${System.currentTimeMillis()}.m4a")
-                            tmp.copyTo(dest, overwrite = true)
-                            localFiles = localFiles + dest
-                        }
-                        showAttachSheet = false
-                    }
-                }) { Icon(if (isRecording) Icons.Default.Stop else Icons.Default.Mic, null); Text(if (isRecording) " Arrêter" else " Note vocale") }
-                Spacer(Modifier.height(20.dp))
-            }
-        }
-    }
-    if (showThemeSheet) {
-        ModalBottomSheet(onDismissRequest = { showThemeSheet = false }) {
-            Column(Modifier.padding(16.dp)) {
-                ChatThemes.all.forEach { t ->
-                    TextButton(onClick = { themeRepo.setTheme(address, t.id); theme = t; showThemeSheet = false }) { Text(t.name) }
-                }
-                Spacer(Modifier.height(20.dp))
+                Spacer(Modifier.height(6.dp))
             }
         }
     }
