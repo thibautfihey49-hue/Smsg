@@ -96,7 +96,6 @@ class SmsRepository(private val context: Context) {
     fun sendSms(address: String, body: String) {
         try {
             SmsManager.getDefault().sendTextMessage(address, null, body, null, null)
-            // Si pas app par défaut, on insert nous même dans SENT pour affichage instantané
             if (!isDefaultSmsApp()) {
                 val values = android.content.ContentValues().apply {
                     put(Telephony.Sms.ADDRESS, address)
@@ -108,5 +107,16 @@ class SmsRepository(private val context: Context) {
                 try { context.contentResolver.insert(Telephony.Sms.Sent.CONTENT_URI, values) } catch (e: Exception) {}
             }
         } catch (e: Exception) {}
+    }
+    fun deleteMessage(msgId: Long): Boolean {
+        return try { context.contentResolver.delete(Telephony.Sms.CONTENT_URI, "${Telephony.Sms._ID}=?", arrayOf(msgId.toString())) > 0 } catch (e: Exception) { false }
+    }
+    fun deleteThread(threadId: Long, address: String): Boolean {
+        return try {
+            val realId = if (threadId == 0L) getOrCreateThreadId(address) else threadId
+            context.contentResolver.delete(Telephony.Sms.CONTENT_URI, "${Telephony.Sms.THREAD_ID}=?", arrayOf(realId.toString()))
+            context.contentResolver.delete(Uri.parse("content://mms-sms/conversations/$realId"), null, null)
+            true
+        } catch (e: Exception) { false }
     }
 }
