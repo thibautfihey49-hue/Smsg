@@ -5,7 +5,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Archive
+import androidx.compose.material.icons.filled.Contacts
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -23,29 +23,26 @@ import java.text.SimpleDateFormat
 
 @OptIn(ExperimentalPermissionsApi::class, ExperimentalMaterial3Api::class)
 @Composable
-fun ConversationListScreen(onConversationClick: (Long, String) -> Unit) {
+fun ConversationListScreen(onConversationClick: (Long, String) -> Unit, onNewMessageClick: () -> Unit, onAddContactClick: (String) -> Unit) {
     val ctx = LocalContext.current
     val repo = remember { SmsRepository(ctx) }
     var convs by remember { mutableStateOf<List<Conversation>>(emptyList()) }
     var q by remember { mutableStateOf("") }
-    val perms = rememberMultiplePermissionsState(listOf(android.Manifest.permission.READ_SMS, android.Manifest.permission.SEND_SMS, android.Manifest.permission.READ_CONTACTS))
+    val perms = rememberMultiplePermissionsState(listOf(android.Manifest.permission.READ_SMS, android.Manifest.permission.SEND_SMS, android.Manifest.permission.READ_CONTACTS, android.Manifest.permission.WRITE_CONTACTS))
     LaunchedEffect(perms.allPermissionsGranted) { if (perms.allPermissionsGranted) convs = repo.getConversations() }
     LaunchedEffect(Unit) { perms.launchMultiplePermissionRequest() }
     Scaffold(
-        topBar = { TopAppBar(title = { Text("Messages", fontWeight = FontWeight.Medium) }, actions = { IconButton(onClick = {}) { Icon(Icons.Default.Archive, null) } }) },
-        floatingActionButton = { FloatingActionButton(onClick = {}) { Text("+") } }
+        topBar = { TopAppBar(title = { Text("Messages", fontWeight = FontWeight.Medium) }, actions = { IconButton(onClick = onNewMessageClick) { Icon(Icons.Default.Contacts, null) } }) },
+        floatingActionButton = { ExtendedFloatingActionButton(onClick = onNewMessageClick, icon = { Icon(Icons.Default.Contacts, null) }, text = { Text("Nouveau") }) }
     ) { pad ->
         Column(Modifier.padding(pad).fillMaxSize()) {
-            OutlinedTextField(value = q, onValueChange = { q = it }, modifier = Modifier.fillMaxWidth().padding(16.dp), placeholder = { Text("Rechercher dans les messages") }, leadingIcon = { Icon(Icons.Default.Search, null) }, shape = MaterialTheme.shapes.extraLarge, singleLine = true)
-            if (!perms.allPermissionsGranted) {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Button(onClick = { perms.launchMultiplePermissionRequest() }) { Text("Autoriser les SMS") } }
-            } else {
+            OutlinedTextField(value = q, onValueChange = { q = it }, modifier = Modifier.fillMaxWidth().padding(16.dp), placeholder = { Text("Rechercher") }, leadingIcon = { Icon(Icons.Default.Search, null) }, shape = MaterialTheme.shapes.extraLarge, singleLine = true)
+            if (!perms.allPermissionsGranted) { Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Button(onClick = { perms.launchMultiplePermissionRequest() }) { Text("Autoriser SMS + Contacts") } } }
+            else {
                 LazyColumn {
-                    items(convs.filter { it.address.contains(q, true) || it.snippet.contains(q, true) }) { c ->
+                    items(convs.filter { it.address.contains(q, true) || (it.contactName?.contains(q, true) ?: false) || it.snippet.contains(q, true) }) { c ->
                         Row(Modifier.fillMaxWidth().clickable { onConversationClick(c.id, c.address) }.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Surface(Modifier.size(40.dp).clip(CircleShape), color = MaterialTheme.colorScheme.primaryContainer) {
-                                Box(contentAlignment = Alignment.Center) { Text((c.contactName?.firstOrNull() ?: c.address.firstOrNull() ?: "?").toString().uppercase()) }
-                            }
+                            Surface(Modifier.size(40.dp).clip(CircleShape), color = MaterialTheme.colorScheme.primaryContainer) { Box(contentAlignment = Alignment.Center) { Text((c.contactName?.firstOrNull() ?: c.address.firstOrNull() ?: "?").toString().uppercase()) } }
                             Spacer(Modifier.width(16.dp))
                             Column(Modifier.weight(1f)) {
                                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {

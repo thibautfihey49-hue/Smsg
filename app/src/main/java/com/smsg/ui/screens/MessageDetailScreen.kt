@@ -5,6 +5,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -17,15 +18,22 @@ import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MessageDetailScreen(threadId: Long, address: String, onBack: () -> Unit) {
+fun MessageDetailScreen(threadId: Long, address: String, onBack: () -> Unit, onAddContact: (String) -> Unit) {
     val ctx = LocalContext.current
     val repo = remember { SmsRepository(ctx) }
     var msgs by remember { mutableStateOf<List<Message>>(emptyList()) }
     var input by remember { mutableStateOf("") }
     val scope = rememberCoroutineScope()
-    LaunchedEffect(threadId) { msgs = repo.getMessagesForThread(threadId) }
+    var showAddBtn by remember { mutableStateOf(false) }
+    LaunchedEffect(threadId) { msgs = repo.getMessagesForThread(threadId); showAddBtn = threadId == 0L || msgs.isEmpty() }
     Scaffold(
-        topBar = { TopAppBar(title = { Text(address) }, navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, null) } }) },
+        topBar = {
+            TopAppBar(
+                title = { Text(address) },
+                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, null) } },
+                actions = { IconButton(onClick = { onAddContact(address) }) { Icon(Icons.Default.PersonAdd, "Ajouter contact") } }
+            )
+        },
         bottomBar = {
             Row(Modifier.fillMaxWidth().padding(12.dp).imePadding(), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
                 OutlinedTextField(value = input, onValueChange = { input = it }, modifier = Modifier.weight(1f), placeholder = { Text("Message") }, shape = RoundedCornerShape(24.dp))
@@ -43,6 +51,7 @@ fun MessageDetailScreen(threadId: Long, address: String, onBack: () -> Unit) {
         }
     ) { pad ->
         LazyColumn(Modifier.padding(pad).fillMaxSize().padding(12.dp), reverseLayout = true) {
+            if (showAddBtn) { item { AssistChip(onClick = { onAddContact(address) }, label = { Text("Ajouter $address aux contacts") }, leadingIcon = { Icon(Icons.Default.PersonAdd, null) }) } }
             items(msgs.reversed()) { m ->
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = if (m.isMe) Arrangement.End else Arrangement.Start) {
                     Surface(shape = RoundedCornerShape(20.dp, 20.dp, if (m.isMe) 20.dp else 4.dp, if (m.isMe) 4.dp else 20.dp), color = if (m.isMe) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant, modifier = Modifier.widthIn(max = 300.dp)) {
