@@ -7,7 +7,6 @@ import android.provider.ContactsContract
 import com.smsg.data.model.ContactInfo
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-
 class ContactsRepository(private val context: Context) {
     suspend fun getAllContacts(): List<ContactInfo> = withContext(Dispatchers.IO) {
         val list = mutableListOf<ContactInfo>()
@@ -28,7 +27,6 @@ class ContactsRepository(private val context: Context) {
         }
         list
     }
-
     suspend fun exists(phone: String): Boolean = withContext(Dispatchers.IO) {
         try {
             val uri = Uri.withAppendedPath(ContactsContract.PhoneLookup.CONTENT_FILTER_URI, Uri.encode(phone))
@@ -36,25 +34,12 @@ class ContactsRepository(private val context: Context) {
             cur?.use { it.moveToFirst() }?: false
         } catch (e: Exception) { false }
     }
-
     suspend fun addContact(name: String, phone: String): Boolean = withContext(Dispatchers.IO) {
         try {
-            val rawUri = context.contentResolver.insert(ContactsContract.RawContacts.CONTENT_URI, ContentValues().apply {
-                put(ContactsContract.RawContacts.ACCOUNT_TYPE, null as String?)
-                put(ContactsContract.RawContacts.ACCOUNT_NAME, null as String?)
-            })?: return@withContext false
+            val rawUri = context.contentResolver.insert(ContactsContract.RawContacts.CONTENT_URI, ContentValues().apply { put(ContactsContract.RawContacts.ACCOUNT_TYPE, null as String?); put(ContactsContract.RawContacts.ACCOUNT_NAME, null as String?) })?: return@withContext false
             val rawId = ContentUris.parseId(rawUri)
-            context.contentResolver.insert(ContactsContract.Data.CONTENT_URI, ContentValues().apply {
-                put(ContactsContract.Data.RAW_CONTACT_ID, rawId)
-                put(ContactsContract.Data.MIMETYPE, ContactsContract.CommonDataKinds.StructuredName.CONTENT_ITEM_TYPE)
-                put(ContactsContract.CommonDataKinds.StructuredName.DISPLAY_NAME, name)
-            })
-            context.contentResolver.insert(ContactsContract.Data.CONTENT_URI, ContentValues().apply {
-                put(ContactsContract.Data.RAW_CONTACT_ID, rawId)
-                put(ContactsContract.Data.MIMETYPE, ContactsContract.CommonDataKinds.Phone.CONTENT_ITEM_TYPE)
-                put(ContactsContract.CommonDataKinds.Phone.NUMBER, phone)
-                put(ContactsContract.CommonDataKinds.Phone.TYPE, ContactsContract.CommonDataKinds.Phone.TYPE_MOBILE)
-            })
+            context.contentResolver.insert(ContactsContract.Data.CONTENT_URI, ContentValues().apply { put(ContactsContract.Data.RAW_CONTACT_ID, rawId); put(ContactsContract.Data.MIMETYPE, ContactsContract.CommonDataKinds.StructuredName.CONTENT_ITEM_TYPE); put(ContactsContract.CommonDataKinds.StructuredName.DISPLAY_NAME, name) })
+            context.contentResolver.insert(ContactsContract.Data.CONTENT_URI, ContentValues().apply { put(ContactsContract.Data.RAW_CONTACT_ID, rawId); put(ContactsContract.Data.MIMETYPE, ContactsContract.CommonDataKinds.Phone.CONTENT_ITEM_TYPE); put(ContactsContract.CommonDataKinds.Phone.NUMBER, phone); put(ContactsContract.CommonDataKinds.Phone.TYPE, ContactsContract.CommonDataKinds.Phone.TYPE_MOBILE) })
             true
         } catch (e: Exception) { false }
     }

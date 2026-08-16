@@ -1,7 +1,9 @@
 package com.smsg.data.repository
+import android.app.role.RoleManager
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
 import android.provider.ContactsContract
 import android.provider.Telephony
 import android.telephony.SmsManager
@@ -9,25 +11,23 @@ import com.smsg.data.model.Conversation
 import com.smsg.data.model.Message
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-
 class SmsRepository(private val context: Context) {
-
-    fun isDefaultSmsApp(): Boolean {
-        return Telephony.Sms.getDefaultSmsPackage(context) == context.packageName
-    }
+    fun isDefaultSmsApp(): Boolean = Telephony.Sms.getDefaultSmsPackage(context) == context.packageName
     fun getDefaultIntent(): Intent {
-        return Intent(Telephony.Sms.Intents.ACTION_CHANGE_DEFAULT)
-            .putExtra(Telephony.Sms.Intents.EXTRA_PACKAGE_NAME, context.packageName)
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val rm = context.getSystemService(RoleManager::class.java)
+            rm.createRequestRoleIntent(RoleManager.ROLE_SMS)
+        } else {
+            Intent(Telephony.Sms.Intents.ACTION_CHANGE_DEFAULT).putExtra(Telephony.Sms.Intents.EXTRA_PACKAGE_NAME, context.packageName)
+        }
     }
-
-    private fun getContactName(phone: String): String? {
+    fun getContactName(phone: String): String? {
         return try {
             val uri = Uri.withAppendedPath(ContactsContract.PhoneLookup.CONTENT_FILTER_URI, Uri.encode(phone))
             val cur = context.contentResolver.query(uri, arrayOf(ContactsContract.PhoneLookup.DISPLAY_NAME), null, null, null)
             cur?.use { if (it.moveToFirst()) it.getString(0) else null }
         } catch (e: Exception) { null }
     }
-
     suspend fun getConversations(): List<Conversation> = withContext(Dispatchers.IO) {
         val map = linkedMapOf<Long, Conversation>()
         try {
@@ -43,23 +43,22 @@ class SmsRepository(private val context: Context) {
                     if (idxThread == -1) continue
                     val threadId = it.getLong(idxThread)
                     if (map.containsKey(threadId)) continue
-                    val address = if (idxAddr != -1) it.getString(idxAddr) ?: "" else ""
+                    val address = if (idxAddr != -1) it.getString(idxAddr)?: "" else ""
                     if (address.isBlank()) continue
-                    val body = if (idxBody != -1) it.getString(idxBody) ?: "" else ""
+                    val body = if (idxBody != -1) it.getString(idxBody)?: "" else ""
                     val date = if (idxDate != -1) it.getLong(idxDate) else System.currentTimeMillis()
                     val name = getContactName(address)
                     map[threadId] = Conversation(threadId, address, name, body, date, 0)
                 }
             }
-        } catch (e: Exception) { e.printStackTrace() }
+        } catch (e: Exception) {}
         map.values.toList()
     }
-
     suspend fun getMessagesForThread(threadId: Long): List<Message> = withContext(Dispatchers.IO) {
         val list = mutableListOf<Message>()
         try {
             val uri = Telephony.Sms.CONTENT_URI
-            val cur = context.contentResolver.query(uri, null, "${Telephony.Sms.THREAD_ID} = ?", arrayOf(threadId.toString()), "${Telephony.Sms.DATE} ASC")
+            val cur = context.contentResolver.query(uri, null, "${Telephony.Sms.THREAD_ID} =?", arrayOf(threadId.toString()), "${Telephony.Sms.DATE} ASC")
             cur?.use {
                 val idxId = it.getColumnIndex(Telephony.Sms._ID)
                 val idxThread = it.getColumnIndex(Telephony.Sms.THREAD_ID)
@@ -71,20 +70,16 @@ class SmsRepository(private val context: Context) {
                 while (it.moveToNext()) {
                     val id = if (idxId != -1) it.getLong(idxId) else 0L
                     val tId = if (idxThread != -1) it.getLong(idxThread) else threadId
-                    val addr = if (idxAddr != -1) it.getString(idxAddr) ?: "" else ""
-                    val body = if (idxBody != -1) it.getString(idxBody) ?: "" else ""
+                    val addr = if (idxAddr != -1) it.getString(idxAddr)?: "" else ""
+                    val body = if (idxBody != -1) it.getString(idxBody)?: "" else ""
                     val date = if (idxDate != -1) it.getLong(idxDate) else 0L
                     val type = if (idxType != -1) it.getInt(idxType) else 1
                     val read = if (idxRead != -1) it.getInt(idxRead) == 1 else true
                     list.add(Message(id, tId, addr, body, date, type == 2, read, type))
                 }
             }
-        } catch (e: Exception) { e.printStackTrace() }
+        } catch (e: Exception) {}
         list
     }
-
-    fun sendSms(address: String, body: String) {
-        try { SmsManager.getDefault().sendTextMessage(address, null, body, null, null) }
-        catch (e: Exception) { e.printStackTrace() }
-    }
+    fun sendSms(address: String, body: String) { try { SmsManager.getDefault().sendTextMessage(address, null, body, null, null) } catch (e: Exception) {} }
 }
