@@ -6,25 +6,17 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.smsg.ui.screens.*
 import java.io.File
-
 @Composable
 fun AppNavHost() {
     val nav = rememberNavController()
     val ctx = LocalContext.current
     NavHost(navController = nav, startDestination = "whatsapp") {
         composable("whatsapp") {
-            var convs by remember { mutableStateOf(listOf<com.smsg.data.model.Conversation>()) }
             WhatsAppMainScreen(
-                chatContent = {
-                    ConversationListScreen(
-                        onConversationClick = { id, addr -> nav.navigate("chat/$id/$addr") },
-                        onNewMessageClick = { nav.navigate("new") },
-                        onAddContactClick = {}
-                    )
-                },
+                chatContent = { ConversationListScreen(onConversationClick = { id, addr -> nav.navigate("chat/$id/$addr") }, onNewMessageClick = { nav.navigate("new") }, onAddContactClick = {}) },
                 statusContent = { StatusScreen(filesDir = ctx.filesDir, onAddStatus = {}) },
-                commuContent = { CallsScreen(convs = convs) },
-                callsContent = { CallsScreen(convs = convs) }
+                commuContent = { StatusScreen(filesDir = ctx.filesDir, onAddStatus = {}) },
+                callsContent = { CallsScreen(convs = emptyList()) }
             )
         }
         composable("chat/{id}/{addr}") { backStack ->
@@ -32,8 +24,6 @@ fun AppNavHost() {
             val addr = backStack.arguments?.getString("addr") ?: ""
             MessageDetailScreen(threadId = id, address = addr, onBack = { nav.popBackStack() }, onAddContact = {})
         }
-        composable("new") {
-            NewConversationScreen(onConversationCreated = { id, addr -> nav.navigate("chat/$id/$addr") { popUpTo("whatsapp") } }, onBack = { nav.popBackStack() })
-        }
+        composable("new") { NewConversationScreen(onConversationCreated = { id, addr -> nav.navigate("chat/$id/$addr") { popUpTo("whatsapp") } }, onBack = { nav.popBackStack() }) }
     }
 }
