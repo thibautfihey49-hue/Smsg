@@ -6,6 +6,7 @@ import android.content.IntentFilter
 import android.database.ContentObserver
 import android.media.MediaRecorder
 import android.net.Uri
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.provider.Telephony
@@ -22,10 +23,12 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import com.google.accompanist.permissions.ExperimentalPermissionsApi
+import com.google.accompanist.permissions.isGranted
+import com.google.accompanist.permissions.rememberPermissionState
 import com.smsg.data.model.ChatThemes
 import com.smsg.data.model.Message
 import com.smsg.data.repository.ContactsRepository
@@ -35,7 +38,7 @@ import com.smsg.data.repository.ThemeRepository
 import kotlinx.coroutines.launch
 import java.io.File
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class, ExperimentalPermissionsApi::class)
 @Composable
 fun MessageDetailScreen(threadId: Long, address: String, onBack: () -> Unit, onAddContact: (String) -> Unit) {
     val ctx = LocalContext.current
@@ -57,6 +60,7 @@ fun MessageDetailScreen(threadId: Long, address: String, onBack: () -> Unit, onA
     var recorder by remember { mutableStateOf<MediaRecorder?>(null) }
     var audioFile by remember { mutableStateOf<File?>(null) }
     val scope = rememberCoroutineScope()
+    val recordPerm = rememberPermissionState(android.Manifest.permission.RECORD_AUDIO)
 
     val pickImage = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         uri?.let { scope.launch { val ok = mmsRepo.sendMms(address, it, "image/jpeg"); Toast.makeText(ctx, if (ok) "Image envoyée" else "Échec MMS", Toast.LENGTH_SHORT).show() } }
@@ -114,31 +118,36 @@ fun MessageDetailScreen(threadId: Long, address: String, onBack: () -> Unit, onA
                 }
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
                     FilledTonalButton(onClick = {
+                        if (!recordPerm.status.isGranted) { recordPerm.launchPermissionRequest(); return@FilledTonalButton }
                         if (!isRecording) {
                             try {
                                 val f = File(ctx.cacheDir, "voice_${System.currentTimeMillis()}.m4a")
                                 audioFile = f
-                                recorder = MediaRecorder().apply {
+                                val mr = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) MediaRecorder(ctx) else MediaRecorder()
+                                mr.apply {
                                     setAudioSource(MediaRecorder.AudioSource.MIC)
                                     setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
                                     setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
                                     setOutputFile(f.absolutePath)
                                     prepare(); start()
                                 }
+                                recorder = mr
                                 isRecording = true
-                                Toast.makeText(ctx, "Enregistrement...", Toast.LENGTH_SHORT).show()
-                            } catch (e: Exception) { Toast.makeText(ctx, "Micro refusé", Toast.LENGTH_SHORT).show() }
+                                Toast.makeText(ctx, "Enregistrement... appuie Stop pour envoyer", Toast.LENGTH_SHORT).show()
+                            } catch (e: Exception) { Toast.makeText(ctx, "Erreur micro: ${e.message}", Toast.LENGTH_SHORT).show() }
                         } else {
                             try { recorder?.stop(); recorder?.release() } catch (e: Exception) {}
-                            isRecording = false
+                            isRecording = false; recorder = null
                             audioFile?.let { file ->
-                                val uri = Uri.fromFile(file)
-                                scope.launch { mmsRepo.sendMms(address, uri, "audio/mp4") }
-                                Toast.makeText(ctx, "Note vocale envoyée", Toast.LENGTH_SHORT).show()
+                                scope.launch {
+                                    val uri = Uri.fromFile(file)
+                                    val ok = mmsRepo.sendMms(address, uri, "audio/mp4")
+                                    Toast.makeText(ctx, if (ok) "Note vocale envoyée" else "Échec vocale", Toast.LENGTH_SHORT).show()
+                                }
                             }
                             showAttachSheet = false
                         }
-                    }) { Icon(if (isRecording) Icons.Default.Stop else Icons.Default.Mic, null); Spacer(Modifier.width(8.dp)); Text(if (isRecording) "Stop" else "Vocale") }
+                    }) { Icon(if (isRecording) Icons.Default.Stop else Icons.Default.Mic, null); Spacer(Modifier.width(8.dp)); Text(if (isRecording) "Stop & Envoyer" else "Vocale") }
                 }
                 Spacer(Modifier.height(20.dp))
             }
@@ -157,7 +166,7 @@ fun MessageDetailScreen(threadId: Long, address: String, onBack: () -> Unit, onA
                 })
         },
         bottomBar = {
-            Row(Modifier.fillMaxWidth().padding(12.dp).imePadding(), verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.fillMaxWidth().padding(12.dp).imePadding(), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
                 IconButton(onClick = { showAttachSheet = true }) { Icon(Icons.Default.AttachFile, null) }
                 OutlinedTextField(value = input, onValueChange = { input = it }, modifier = Modifier.weight(1f), placeholder = { Text("Message") }, shape = RoundedCornerShape(24.dp))
                 Spacer(Modifier.width(8.dp))

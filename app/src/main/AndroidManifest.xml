@@ -29,6 +29,7 @@
         <receiver android:name=".data.receiver.MmsReceiver" android:exported="true" android:permission="android.permission.BROADCAST_WAP_PUSH">
             <intent-filter><action android:name="android.provider.Telephony.WAP_PUSH_DELIVER"/><data android:mimeType="application/vnd.wap.mms-message"/></intent-filter>
         </receiver>
+        <receiver android:name=".data.receiver.ReplyReceiver" android:exported="false"/>
         <service android:name=".data.service.RespondService" android:exported="true" android:permission="android.permission.SEND_RESPOND_VIA_MESSAGE">
             <intent-filter><action android:name="android.intent.action.RESPOND_VIA_MESSAGE"/><category android:name="android.intent.category.DEFAULT"/><data android:scheme="sms"/><data android:scheme="smsto"/><data android:scheme="mms"/><data android:scheme="mmsto"/></intent-filter>
         </service>
