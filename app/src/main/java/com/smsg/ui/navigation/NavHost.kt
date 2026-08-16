@@ -27,9 +27,12 @@ fun SmsgNavHost() {
             MessageDetailScreen(tid, addr, onBack = { nav.popBackStack() }, onAddContact = { num -> nav.navigate("add_contact/$num") })
         }
         composable("contacts") {
-            ContactsScreen(onBack = { nav.popBackStack() }, onContactClick = { c -> c.numbers.firstOrNull()?.let { num -> nav.navigate("detail/0/$num") } }, onAddContact = { nav.navigate("add_contact/") })
+            ContactsScreen(onBack = { nav.popBackStack() }, onContactClick = { c -> c.numbers.firstOrNull()?.let { num -> nav.navigate("detail/0/$num") } }, onAddContact = { nav.navigate("add_contact_empty") })
         }
-        composable("add_contact/{phone}", arguments = listOf(navArgument("phone") { type = NavType.StringType; defaultValue = "" })) {
+        composable("add_contact_empty") {
+            AddContactScreen(initialPhone = "", onBack = { nav.popBackStack() }, onSaved = { nav.popBackStack() })
+        }
+        composable("add_contact/{phone}", arguments = listOf(navArgument("phone") { type = NavType.StringType })) {
             val phone = it.arguments?.getString("phone") ?: ""
             AddContactScreen(initialPhone = phone, onBack = { nav.popBackStack() }, onSaved = { nav.popBackStack() })
         }

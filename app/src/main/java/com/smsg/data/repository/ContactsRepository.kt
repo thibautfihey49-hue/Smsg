@@ -1,5 +1,6 @@
 package com.smsg.data.repository
-import android.content.ContentProviderOperation
+import android.content.ContentUris
+import android.content.ContentValues
 import android.content.Context
 import android.provider.ContactsContract
 import com.smsg.data.model.ContactInfo
@@ -26,14 +27,27 @@ class ContactsRepository(private val context: Context) {
         }
         list
     }
-
     suspend fun addContact(name: String, phone: String): Boolean = withContext(Dispatchers.IO) {
         try {
-            val ops = ArrayList<ContentProviderOperation>()
-            ops.add(ContentProviderOperation.newInsert(ContactsContract.RawContacts.CONTENT_URI).withValue(ContactsContract.RawContacts.ACCOUNT_TYPE, null).withValue(ContactsContract.RawContacts.ACCOUNT_NAME, null).build())
-            ops.add(ContentProviderOperation.newInsert(ContactsContract.Data.CONTENT_URI).withValueBackReference(ContactsContract.Data.RAW_CONTACT_ID, 0).withValue(ContactsContract.Data.MIMETYPE, ContactsContract.CommonDataKinds.StructuredName.CONTENT_ITEM_TYPE).withValue(ContactsContract.CommonDataKinds.StructuredName.DISPLAY_NAME, name).build())
-            ops.add(ContentProviderOperation.newInsert(ContactsContract.Data.CONTENT_URI).withValueBackReference(ContactsContract.Data.RAW_CONTACT_ID, 0).withValue(ContactsContract.Data.MIMETYPE, ContactsContract.CommonDataKinds.Phone.CONTENT_ITEM_TYPE).withValue(ContactsContract.CommonDataKinds.Phone.NUMBER, phone).withValue(ContactsContract.CommonDataKinds.Phone.TYPE, ContactsContract.CommonDataKinds.Phone.TYPE_MOBILE).build())
-            context.contentResolver.applyBatch(ContactsContract.AUTHORITY, ops)
+            val values = ContentValues().apply {
+                put(ContactsContract.RawContacts.ACCOUNT_TYPE, null as String?)
+                put(ContactsContract.RawContacts.ACCOUNT_NAME, null as String?)
+            }
+            val rawUri = context.contentResolver.insert(ContactsContract.RawContacts.CONTENT_URI, values) ?: return@withContext false
+            val rawId = ContentUris.parseId(rawUri)
+            val nameValues = ContentValues().apply {
+                put(ContactsContract.Data.RAW_CONTACT_ID, rawId)
+                put(ContactsContract.Data.MIMETYPE, ContactsContract.CommonDataKinds.StructuredName.CONTENT_ITEM_TYPE)
+                put(ContactsContract.CommonDataKinds.StructuredName.DISPLAY_NAME, name)
+            }
+            context.contentResolver.insert(ContactsContract.Data.CONTENT_URI, nameValues)
+            val phoneValues = ContentValues().apply {
+                put(ContactsContract.Data.RAW_CONTACT_ID, rawId)
+                put(ContactsContract.Data.MIMETYPE, ContactsContract.CommonDataKinds.Phone.CONTENT_ITEM_TYPE)
+                put(ContactsContract.CommonDataKinds.Phone.NUMBER, phone)
+                put(ContactsContract.CommonDataKinds.Phone.TYPE, ContactsContract.CommonDataKinds.Phone.TYPE_MOBILE)
+            }
+            context.contentResolver.insert(ContactsContract.Data.CONTENT_URI, phoneValues)
             true
         } catch (e: Exception) { false }
     }

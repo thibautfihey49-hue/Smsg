@@ -1,4 +1,5 @@
 package com.smsg.ui.screens
+import android.widget.Toast
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
@@ -21,10 +22,22 @@ fun AddContactScreen(initialPhone: String = "", onBack: () -> Unit, onSaved: () 
     var saving by remember { mutableStateOf(false) }
     Scaffold(topBar = { TopAppBar(title = { Text("Ajouter contact") }, navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, null) } }) }) { pad ->
         Column(Modifier.padding(pad).padding(16.dp).fillMaxSize(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Nom") }, modifier = Modifier.fillMaxWidth())
-            OutlinedTextField(value = phone, onValueChange = { phone = it }, label = { Text("Numéro") }, modifier = Modifier.fillMaxWidth())
+            OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Nom *") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+            OutlinedTextField(value = phone, onValueChange = { phone = it }, label = { Text("Numéro *") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
             Spacer(Modifier.height(16.dp))
-            Button(onClick = { scope.launch { saving = true; if (repo.addContact(name, phone)) onSaved(); saving = false } }, enabled = name.isNotBlank() && phone.isNotBlank() && !saving, modifier = Modifier.fillMaxWidth()) {
+            Button(onClick = {
+                scope.launch {
+                    saving = true
+                    val ok = repo.addContact(name.trim(), phone.trim())
+                    saving = false
+                    if (ok) {
+                        Toast.makeText(ctx, "Contact ajouté", Toast.LENGTH_SHORT).show()
+                        onSaved()
+                    } else {
+                        Toast.makeText(ctx, "Erreur permissions", Toast.LENGTH_LONG).show()
+                    }
+                }
+            }, enabled = name.isNotBlank() && phone.isNotBlank() && !saving, modifier = Modifier.fillMaxWidth()) {
                 Text(if (saving) "Enregistrement..." else "Enregistrer")
             }
         }
