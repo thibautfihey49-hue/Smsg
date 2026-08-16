@@ -28,25 +28,36 @@ fun ConversationListScreen(onConversationClick: (Long, String) -> Unit, onNewMes
     val repo = remember { SmsRepository(ctx) }
     var convs by remember { mutableStateOf<List<Conversation>>(emptyList()) }
     var q by remember { mutableStateOf("") }
-    val perms = rememberMultiplePermissionsState(listOf(android.Manifest.permission.READ_SMS, android.Manifest.permission.SEND_SMS, android.Manifest.permission.READ_CONTACTS, android.Manifest.permission.WRITE_CONTACTS))
+    var isDefault by remember { mutableStateOf(repo.isDefaultSmsApp()) }
+    val perms = rememberMultiplePermissionsState(listOf(android.Manifest.permission.READ_SMS, android.Manifest.permission.SEND_SMS, android.Manifest.permission.RECEIVE_SMS, android.Manifest.permission.READ_CONTACTS, android.Manifest.permission.WRITE_CONTACTS))
     LaunchedEffect(perms.allPermissionsGranted) { if (perms.allPermissionsGranted) convs = repo.getConversations() }
-    LaunchedEffect(Unit) { perms.launchMultiplePermissionRequest() }
+    LaunchedEffect(Unit) { perms.launchMultiplePermissionRequest(); isDefault = repo.isDefaultSmsApp() }
     Scaffold(
         topBar = { TopAppBar(title = { Text("Messages", fontWeight = FontWeight.Medium) }, actions = { IconButton(onClick = onNewMessageClick) { Icon(Icons.Default.Contacts, null) } }) },
         floatingActionButton = { ExtendedFloatingActionButton(onClick = onNewMessageClick, icon = { Icon(Icons.Default.Contacts, null) }, text = { Text("Nouveau") }) }
     ) { pad ->
         Column(Modifier.padding(pad).fillMaxSize()) {
+            if (!isDefault) {
+                Card(Modifier.fillMaxWidth().padding(12.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)) {
+                    Column(Modifier.padding(12.dp)) {
+                        Text("Pour recevoir les SMS, définis Smsg comme app SMS par défaut", style = MaterialTheme.typography.bodyMedium)
+                        Spacer(Modifier.height(8.dp))
+                        Button(onClick = { ctx.startActivity(repo.getDefaultIntent()) }) { Text("Définir par défaut") }
+                    }
+                }
+            }
             OutlinedTextField(value = q, onValueChange = { q = it }, modifier = Modifier.fillMaxWidth().padding(16.dp), placeholder = { Text("Rechercher") }, leadingIcon = { Icon(Icons.Default.Search, null) }, shape = MaterialTheme.shapes.extraLarge, singleLine = true)
-            if (!perms.allPermissionsGranted) { Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Button(onClick = { perms.launchMultiplePermissionRequest() }) { Text("Autoriser SMS + Contacts") } } }
-            else {
+            if (!perms.allPermissionsGranted) {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Button(onClick = { perms.launchMultiplePermissionRequest() }) { Text("Autoriser SMS + Contacts") } }
+            } else {
                 LazyColumn {
-                    items(convs.filter { it.address.contains(q, true) || (it.contactName?.contains(q, true) ?: false) || it.snippet.contains(q, true) }) { c ->
+                    items(convs.filter { it.address.contains(q, true) || (it.contactName?.contains(q, true)?: false) || it.snippet.contains(q, true) }) { c ->
                         Row(Modifier.fillMaxWidth().clickable { onConversationClick(c.id, c.address) }.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Surface(Modifier.size(40.dp).clip(CircleShape), color = MaterialTheme.colorScheme.primaryContainer) { Box(contentAlignment = Alignment.Center) { Text((c.contactName?.firstOrNull() ?: c.address.firstOrNull() ?: "?").toString().uppercase()) } }
+                            Surface(Modifier.size(40.dp).clip(CircleShape), color = MaterialTheme.colorScheme.primaryContainer) { Box(contentAlignment = Alignment.Center) { Text((c.contactName?.firstOrNull()?: c.address.firstOrNull()?: "?").toString().uppercase()) } }
                             Spacer(Modifier.width(16.dp))
                             Column(Modifier.weight(1f)) {
                                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                    Text(c.contactName ?: c.address, fontWeight = FontWeight.Medium)
+                                    Text(c.contactName?: c.address, fontWeight = FontWeight.Medium)
                                     Text(SimpleDateFormat("HH:mm", java.util.Locale.FRANCE).format(java.util.Date(c.date)), style = MaterialTheme.typography.labelSmall)
                                 }
                                 Text(c.snippet, maxLines = 1)

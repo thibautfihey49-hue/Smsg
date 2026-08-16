@@ -13,6 +13,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.smsg.data.model.Message
+import com.smsg.data.repository.ContactsRepository
 import com.smsg.data.repository.SmsRepository
 import kotlinx.coroutines.launch
 
@@ -21,17 +22,21 @@ import kotlinx.coroutines.launch
 fun MessageDetailScreen(threadId: Long, address: String, onBack: () -> Unit, onAddContact: (String) -> Unit) {
     val ctx = LocalContext.current
     val repo = remember { SmsRepository(ctx) }
+    val contactRepo = remember { ContactsRepository(ctx) }
     var msgs by remember { mutableStateOf<List<Message>>(emptyList()) }
     var input by remember { mutableStateOf("") }
+    var contactExists by remember { mutableStateOf(true) }
     val scope = rememberCoroutineScope()
-    var showAddBtn by remember { mutableStateOf(false) }
-    LaunchedEffect(threadId) { msgs = repo.getMessagesForThread(threadId); showAddBtn = threadId == 0L || msgs.isEmpty() }
+    LaunchedEffect(address) {
+        contactExists = contactRepo.exists(address)
+        msgs = if (threadId!= 0L) repo.getMessagesForThread(threadId) else emptyList()
+    }
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text(address) },
                 navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, null) } },
-                actions = { IconButton(onClick = { onAddContact(address) }) { Icon(Icons.Default.PersonAdd, "Ajouter contact") } }
+                actions = { if (!contactExists) IconButton(onClick = { onAddContact(address) }) { Icon(Icons.Default.PersonAdd, null) } }
             )
         },
         bottomBar = {
@@ -51,7 +56,12 @@ fun MessageDetailScreen(threadId: Long, address: String, onBack: () -> Unit, onA
         }
     ) { pad ->
         LazyColumn(Modifier.padding(pad).fillMaxSize().padding(12.dp), reverseLayout = true) {
-            if (showAddBtn) { item { AssistChip(onClick = { onAddContact(address) }, label = { Text("Ajouter $address aux contacts") }, leadingIcon = { Icon(Icons.Default.PersonAdd, null) }) } }
+            if (!contactExists) {
+                item {
+                    AssistChip(onClick = { onAddContact(address) }, label = { Text("Ajouter $address aux contacts") }, leadingIcon = { Icon(Icons.Default.PersonAdd, null) })
+                    Spacer(Modifier.height(12.dp))
+                }
+            }
             items(msgs.reversed()) { m ->
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = if (m.isMe) Arrangement.End else Arrangement.Start) {
                     Surface(shape = RoundedCornerShape(20.dp, 20.dp, if (m.isMe) 20.dp else 4.dp, if (m.isMe) 4.dp else 20.dp), color = if (m.isMe) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant, modifier = Modifier.widthIn(max = 300.dp)) {
