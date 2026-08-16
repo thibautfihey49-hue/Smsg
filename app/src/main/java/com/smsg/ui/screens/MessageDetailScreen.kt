@@ -3,6 +3,10 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.database.ContentObserver
+import android.os.Handler
+import android.os.Looper
+import android.provider.Telephony
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -30,24 +34,27 @@ fun MessageDetailScreen(threadId: Long, address: String, onBack: () -> Unit, onA
     var input by remember { mutableStateOf("") }
     var contactExists by remember { mutableStateOf(true) }
     var displayName by remember { mutableStateOf(address) }
+    var realThreadId by remember { mutableStateOf(threadId) }
     val scope = rememberCoroutineScope()
     suspend fun refresh() {
+        realThreadId = if (threadId == 0L) repo.getOrCreateThreadId(address) else threadId
         contactExists = contactRepo.exists(address)
         displayName = repo.getContactName(address)?: address
-        if (threadId!= 0L) msgs = repo.getMessagesForThread(threadId)
+        msgs = repo.getMessagesForThread(realThreadId, address)
     }
     LaunchedEffect(address) { refresh() }
-    DisposableEffect(Unit) {
+    DisposableEffect(address) {
+        val observer = object : ContentObserver(Handler(Looper.getMainLooper())) { override fun onChange(selfChange: Boolean) { scope.launch { refresh() } } }
+        ctx.contentResolver.registerContentObserver(Telephony.Sms.CONTENT_URI, true, observer)
         val br = object : BroadcastReceiver() { override fun onReceive(c: Context, i: Intent) { scope.launch { refresh() } } }
-        val f = IntentFilter("com.smsg.NEW_SMS")
-        ctx.registerReceiver(br, f, Context.RECEIVER_NOT_EXPORTED)
-        onDispose { ctx.unregisterReceiver(br) }
+        ctx.registerReceiver(br, IntentFilter("com.smsg.NEW_SMS"), Context.RECEIVER_NOT_EXPORTED)
+        onDispose { ctx.contentResolver.unregisterContentObserver(observer); ctx.unregisterReceiver(br) }
     }
     Scaffold(topBar = { TopAppBar(title = { Text(displayName) }, navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, null) } }, actions = { if (!contactExists) IconButton(onClick = { onAddContact(address) }) { Icon(Icons.Default.PersonAdd, null) } }) }, bottomBar = {
         Row(Modifier.fillMaxWidth().padding(12.dp).imePadding(), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
             OutlinedTextField(value = input, onValueChange = { input = it }, modifier = Modifier.weight(1f), placeholder = { Text("Message") }, shape = RoundedCornerShape(24.dp))
             Spacer(Modifier.width(8.dp))
-            FilledIconButton(onClick = { if (input.isNotBlank()) { repo.sendSms(address, input); scope.launch { msgs = msgs + Message(System.currentTimeMillis(), threadId, address, input, System.currentTimeMillis(), true, true, 2); input = ""; refresh() } } }) { Icon(Icons.Default.Send, null) }
+            FilledIconButton(onClick = { if (input.isNotBlank()) { repo.sendSms(address, input); input = ""; scope.launch { refresh() } } }) { Icon(Icons.Default.Send, null) }
         }
     }) { pad ->
         LazyColumn(Modifier.padding(pad).fillMaxSize().padding(12.dp), reverseLayout = true) {

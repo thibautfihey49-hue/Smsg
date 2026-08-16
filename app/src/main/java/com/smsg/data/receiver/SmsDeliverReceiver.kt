@@ -15,7 +15,6 @@ class SmsDeliverReceiver : BroadcastReceiver() {
                     put(Telephony.Sms.BODY, m.messageBody)
                     put(Telephony.Sms.DATE, System.currentTimeMillis())
                     put(Telephony.Sms.READ, 0)
-                    put(Telephony.Sms.SEEN, 0)
                 }
                 try { context.contentResolver.insert(Telephony.Sms.Inbox.CONTENT_URI, values) } catch (e: Exception) {}
                 NotifHelper.showNewSms(context, m.originatingAddress?: "Inconnu", m.messageBody?: "")

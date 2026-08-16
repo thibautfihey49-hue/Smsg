@@ -5,6 +5,7 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.provider.ContactsContract
+import android.provider.Settings
 import android.provider.Telephony
 import android.telephony.SmsManager
 import com.smsg.data.model.Conversation
@@ -14,12 +15,20 @@ import kotlinx.coroutines.withContext
 class SmsRepository(private val context: Context) {
     fun isDefaultSmsApp(): Boolean = Telephony.Sms.getDefaultSmsPackage(context) == context.packageName
     fun getDefaultIntent(): Intent {
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            val rm = context.getSystemService(RoleManager::class.java)
-            rm.createRequestRoleIntent(RoleManager.ROLE_SMS)
-        } else {
+        return try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                val rm = context.getSystemService(RoleManager::class.java)
+                rm.createRequestRoleIntent(RoleManager.ROLE_SMS)
+            } else {
+                Intent(Telephony.Sms.Intents.ACTION_CHANGE_DEFAULT).putExtra(Telephony.Sms.Intents.EXTRA_PACKAGE_NAME, context.packageName)
+            }
+        } catch (e: Exception) {
             Intent(Telephony.Sms.Intents.ACTION_CHANGE_DEFAULT).putExtra(Telephony.Sms.Intents.EXTRA_PACKAGE_NAME, context.packageName)
         }
+    }
+    fun getSettingsIntent(): Intent = Intent(Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS)
+    fun getOrCreateThreadId(address: String): Long {
+        return try { Telephony.Threads.getOrCreateThreadId(context, address) } catch (e: Exception) { 0L }
     }
     fun getContactName(phone: String): String? {
         return try {
@@ -54,11 +63,14 @@ class SmsRepository(private val context: Context) {
         } catch (e: Exception) {}
         map.values.toList()
     }
-    suspend fun getMessagesForThread(threadId: Long): List<Message> = withContext(Dispatchers.IO) {
+    suspend fun getMessagesForThread(threadId: Long, address: String): List<Message> = withContext(Dispatchers.IO) {
+        val realId = if (threadId == 0L) getOrCreateThreadId(address) else threadId
         val list = mutableListOf<Message>()
         try {
             val uri = Telephony.Sms.CONTENT_URI
-            val cur = context.contentResolver.query(uri, null, "${Telephony.Sms.THREAD_ID} =?", arrayOf(threadId.toString()), "${Telephony.Sms.DATE} ASC")
+            val sel = if (realId != 0L) "${Telephony.Sms.THREAD_ID} =?" else "${Telephony.Sms.ADDRESS} =?"
+            val args = if (realId != 0L) arrayOf(realId.toString()) else arrayOf(address)
+            val cur = context.contentResolver.query(uri, null, sel, args, "${Telephony.Sms.DATE} ASC")
             cur?.use {
                 val idxId = it.getColumnIndex(Telephony.Sms._ID)
                 val idxThread = it.getColumnIndex(Telephony.Sms.THREAD_ID)
@@ -69,7 +81,7 @@ class SmsRepository(private val context: Context) {
                 val idxRead = it.getColumnIndex(Telephony.Sms.READ)
                 while (it.moveToNext()) {
                     val id = if (idxId != -1) it.getLong(idxId) else 0L
-                    val tId = if (idxThread != -1) it.getLong(idxThread) else threadId
+                    val tId = if (idxThread != -1) it.getLong(idxThread) else realId
                     val addr = if (idxAddr != -1) it.getString(idxAddr)?: "" else ""
                     val body = if (idxBody != -1) it.getString(idxBody)?: "" else ""
                     val date = if (idxDate != -1) it.getLong(idxDate) else 0L
@@ -81,5 +93,20 @@ class SmsRepository(private val context: Context) {
         } catch (e: Exception) {}
         list
     }
-    fun sendSms(address: String, body: String) { try { SmsManager.getDefault().sendTextMessage(address, null, body, null, null) } catch (e: Exception) {} }
+    fun sendSms(address: String, body: String) {
+        try {
+            SmsManager.getDefault().sendTextMessage(address, null, body, null, null)
+            // Si pas app par défaut, on insert nous même dans SENT pour affichage instantané
+            if (!isDefaultSmsApp()) {
+                val values = android.content.ContentValues().apply {
+                    put(Telephony.Sms.ADDRESS, address)
+                    put(Telephony.Sms.BODY, body)
+                    put(Telephony.Sms.DATE, System.currentTimeMillis())
+                    put(Telephony.Sms.TYPE, Telephony.Sms.MESSAGE_TYPE_SENT)
+                    put(Telephony.Sms.READ, 1)
+                }
+                try { context.contentResolver.insert(Telephony.Sms.Sent.CONTENT_URI, values) } catch (e: Exception) {}
+            }
+        } catch (e: Exception) {}
+    }
 }

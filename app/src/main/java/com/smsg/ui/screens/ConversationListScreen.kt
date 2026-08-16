@@ -3,7 +3,11 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.database.ContentObserver
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
+import android.provider.Telephony
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -40,30 +44,26 @@ fun ConversationListScreen(onConversationClick: (Long, String) -> Unit, onNewMes
     val perms = rememberMultiplePermissionsState(listOf(android.Manifest.permission.READ_SMS, android.Manifest.permission.SEND_SMS, android.Manifest.permission.RECEIVE_SMS, android.Manifest.permission.READ_CONTACTS, android.Manifest.permission.WRITE_CONTACTS))
     val notifPerm = if (Build.VERSION.SDK_INT >= 33) rememberPermissionState(android.Manifest.permission.POST_NOTIFICATIONS) else null
     suspend fun load() { if (perms.allPermissionsGranted) convs = repo.getConversations() }
-    LaunchedEffect(perms.allPermissionsGranted) { load() }
-    LaunchedEffect(Unit) { perms.launchMultiplePermissionRequest(); notifPerm?.launchPermissionRequest(); isDefault = repo.isDefaultSmsApp() }
+    LaunchedEffect(perms.allPermissionsGranted) { load(); isDefault = repo.isDefaultSmsApp() }
+    LaunchedEffect(Unit) { perms.launchMultiplePermissionRequest(); notifPerm?.launchPermissionRequest() }
     DisposableEffect(Unit) {
-        val br = object : BroadcastReceiver() { override fun onReceive(c: Context, i: Intent) { scope.launch { load() } } }
-        val f = IntentFilter("com.smsg.NEW_SMS")
-        ctx.registerReceiver(br, f, Context.RECEIVER_NOT_EXPORTED)
-        onDispose { ctx.unregisterReceiver(br) }
+        val observer = object : ContentObserver(Handler(Looper.getMainLooper())) { override fun onChange(selfChange: Boolean) { scope.launch { load() } } }
+        ctx.contentResolver.registerContentObserver(Telephony.Sms.CONTENT_URI, true, observer)
+        val br = object : BroadcastReceiver() { override fun onReceive(c: Context, i: Intent) { scope.launch { load(); isDefault = repo.isDefaultSmsApp() } } }
+        ctx.registerReceiver(br, IntentFilter("com.smsg.NEW_SMS"), Context.RECEIVER_NOT_EXPORTED)
+        onDispose { ctx.contentResolver.unregisterContentObserver(observer); ctx.unregisterReceiver(br) }
     }
     Scaffold(topBar = { TopAppBar(title = { Text("Messages", fontWeight = FontWeight.Medium) }, actions = { IconButton(onClick = onNewMessageClick) { Icon(Icons.Default.Contacts, null) } }) }, floatingActionButton = { ExtendedFloatingActionButton(onClick = onNewMessageClick, icon = { Icon(Icons.Default.Contacts, null) }, text = { Text("Nouveau") }) }) { pad ->
         Column(Modifier.padding(pad).fillMaxSize()) {
             if (!isDefault) {
                 Card(Modifier.fillMaxWidth().padding(12.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)) {
                     Column(Modifier.padding(12.dp)) {
-                        Text("Pour recevoir les SMS, définis Smsg comme app par défaut")
+                        Text("Xiaomi bloque le bouton auto. Va dans Paramètres pour définir Smsg par défaut.")
                         Spacer(Modifier.height(8.dp))
-                        Button(onClick = { try { ctx.startActivity(repo.getDefaultIntent()) } catch (e: Exception) {} }) { Text("Définir par défaut") }
-                    }
-                }
-            }
-            if (notifPerm!= null && !notifPerm.status.isGranted) {
-                Card(Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
-                    Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text("Activer les notifications", Modifier.weight(1f))
-                        Button(onClick = { notifPerm.launchPermissionRequest() }) { Text("Activer") }
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Button(onClick = { try { ctx.startActivity(repo.getDefaultIntent()) } catch (e: Exception) {} }) { Text("Essayer auto") }
+                            OutlinedButton(onClick = { try { ctx.startActivity(repo.getSettingsIntent()) } catch (e: Exception) {} }) { Text("Ouvrir Paramètres") }
+                        }
                     }
                 }
             }
