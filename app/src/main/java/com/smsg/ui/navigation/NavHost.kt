@@ -1,0 +1,4 @@
+package com.smsg.ui.navigation
+import androidx.compose.runtime.Composable; import androidx.navigation.NavType; import androidx.navigation.compose.NavHost; import androidx.navigation.compose.composable; import androidx.navigation.compose.rememberNavController; import androidx.navigation.navArgument; import com.smsg.ui.screens.ConversationListScreen; import com.smsg.ui.screens.MessageDetailScreen
+@Composable
+fun SmsgNavHost() { val nav = rememberNavController(); NavHost(nav, "list") { composable("list") { ConversationListScreen { id, a -> nav.navigate("detail/$id/$a") } }; composable("detail/{threadId}/{address}", arguments = listOf(navArgument("threadId"){type=NavType.LongType}, navArgument("address"){type=NavType.StringType})) { val tid = it.arguments?.getLong("threadId")?: 0L; val addr = it.arguments?.getString("address")?: ""; MessageDetailScreen(tid, addr) { nav.popBackStack() } } } }
