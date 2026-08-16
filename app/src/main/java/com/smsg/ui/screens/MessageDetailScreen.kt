@@ -50,7 +50,6 @@ fun MessageDetailScreen(threadId: Long, address: String, onBack: () -> Unit, onA
     val ctx = LocalContext.current
     val repo = remember { SmsRepository(ctx) }
     val attachRepo = remember { AttachmentRepository(ctx) }
-    val contactRepo = remember { ContactsRepository(ctx) }
     val themeRepo = remember { ThemeRepository(ctx) }
     var msgs by remember { mutableStateOf<List<Message>>(emptyList()) }
     var localFiles by remember { mutableStateOf<List<File>>(emptyList()) }
@@ -58,8 +57,8 @@ fun MessageDetailScreen(threadId: Long, address: String, onBack: () -> Unit, onA
     var displayName by remember { mutableStateOf(address) }
     var realThreadId by remember { mutableStateOf(threadId) }
     var theme by remember { mutableStateOf(themeRepo.getTheme(address)) }
-    var showThemeSheet by remember { mutableStateOf(false) }
     var showAttachSheet by remember { mutableStateOf(false) }
+    var showThemeSheet by remember { mutableStateOf(false) }
     var isRecording by remember { mutableStateOf(false) }
     var recorder by remember { mutableStateOf<MediaRecorder?>(null) }
     var audioFile by remember { mutableStateOf<File?>(null) }
@@ -67,28 +66,14 @@ fun MessageDetailScreen(threadId: Long, address: String, onBack: () -> Unit, onA
     val scope = rememberCoroutineScope()
     val recordPerm = rememberPermissionState(android.Manifest.permission.RECORD_AUDIO)
     val imagePerm = if (Build.VERSION.SDK_INT >= 33) rememberPermissionState(android.Manifest.permission.READ_MEDIA_IMAGES) else rememberPermissionState(android.Manifest.permission.READ_EXTERNAL_STORAGE)
-
     val pickImage = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         uri?.let {
-            try {
-                val f = attachRepo.copyToInternal(it, "${realThreadId}_img", "jpg")
-                localFiles = localFiles + f
-                Toast.makeText(ctx, "Image ajoutée", Toast.LENGTH_SHORT).show()
-            } catch (e: Exception) { Toast.makeText(ctx, "Erreur image", Toast.LENGTH_SHORT).show() }
+            try { val f = attachRepo.copyToInternal(it, "${realThreadId}_img", "jpg"); localFiles = localFiles + f; Toast.makeText(ctx, "Image ajoutée", Toast.LENGTH_SHORT).show() } catch (e: Exception) {}
         }
     }
-    val pickVideo = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
-        uri?.let {
-            try {
-                val f = attachRepo.copyToInternal(it, "${realThreadId}_vid", "mp4")
-                localFiles = localFiles + f
-            } catch (e: Exception) {}
-        }
-    }
-
     suspend fun refresh() {
         realThreadId = if (threadId == 0L) repo.getOrCreateThreadId(address) else threadId
-        displayName = repo.getContactName(address)?: address
+        displayName = repo.getContactName(address) ?: address
         theme = themeRepo.getTheme(address)
         msgs = repo.getMessagesForThread(realThreadId, address)
         localFiles = ctx.filesDir.listFiles()?.filter { it.name.startsWith(realThreadId.toString()) }?.sortedBy { it.lastModified() } ?: emptyList()
@@ -101,11 +86,9 @@ fun MessageDetailScreen(threadId: Long, address: String, onBack: () -> Unit, onA
         ctx.registerReceiver(br, IntentFilter("com.smsg.NEW_SMS"), Context.RECEIVER_NOT_EXPORTED)
         onDispose { ctx.contentResolver.unregisterContentObserver(observer); ctx.unregisterReceiver(br); player?.release() }
     }
-
     Scaffold(containerColor = theme.bg,
         topBar = {
-            TopAppBar(title = { Text(displayName) },
-                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, null) } },
+            TopAppBar(title = { Text(displayName) }, navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, null) } },
                 actions = {
                     IconButton(onClick = { ctx.startActivity(Intent(Intent.ACTION_DIAL, Uri.parse("tel:$address"))) }) { Icon(Icons.Default.Call, null) }
                     IconButton(onClick = { showThemeSheet = true }) { Icon(Icons.Default.Palette, null) }
@@ -134,22 +117,12 @@ fun MessageDetailScreen(threadId: Long, address: String, onBack: () -> Unit, onA
                     when {
                         file.name.contains("_img") -> {
                             val bmp = remember(file.absolutePath) { try { BitmapFactory.decodeFile(file.absolutePath)?.asImageBitmap() } catch (e: Exception) { null } }
-                            if (bmp != null) {
-                                Image(bitmap = bmp, contentDescription = null, modifier = Modifier.size(220.dp).clip(RoundedCornerShape(16.dp)), contentScale = ContentScale.Crop)
-                            } else {
-                                Text("Image: ${file.name}")
-                            }
+                            if (bmp != null) Image(bitmap = bmp, contentDescription = null, modifier = Modifier.size(220.dp).clip(RoundedCornerShape(16.dp)), contentScale = ContentScale.Crop)
                         }
                         file.name.contains("_voice") -> {
                             FilledTonalButton(onClick = {
-                                try {
-                                    player?.release()
-                                    player = MediaPlayer().apply { setDataSource(file.absolutePath); prepare(); start() }
-                                } catch (e: Exception) {}
+                                try { player?.release(); player = MediaPlayer().apply { setDataSource(file.absolutePath); prepare(); start() } } catch (e: Exception) {}
                             }) { Icon(Icons.Default.PlayArrow, null); Spacer(Modifier.width(8.dp)); Text("Vocale") }
-                        }
-                        else -> {
-                            FilledTonalButton(onClick = {}) { Icon(Icons.Default.Videocam, null); Text(" Vidéo") }
                         }
                     }
                 }
@@ -157,14 +130,11 @@ fun MessageDetailScreen(threadId: Long, address: String, onBack: () -> Unit, onA
             }
         }
     }
-
     if (showAttachSheet) {
         ModalBottomSheet(onDismissRequest = { showAttachSheet = false }) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                Text("Envoyer", style = MaterialTheme.typography.titleMedium)
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
                     FilledTonalButton(onClick = { showAttachSheet = false; pickImage.launch("image/*") }) { Icon(Icons.Default.Image, null); Text(" Image") }
-                    FilledTonalButton(onClick = { showAttachSheet = false; pickVideo.launch("video/*") }) { Icon(Icons.Default.Videocam, null); Text(" Vidéo") }
                 }
                 FilledTonalButton(modifier = Modifier.fillMaxWidth(), onClick = {
                     if (!recordPerm.status.isGranted) { recordPerm.launchPermissionRequest(); return@FilledTonalButton }
@@ -175,16 +145,14 @@ fun MessageDetailScreen(threadId: Long, address: String, onBack: () -> Unit, onA
                             val mr = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) MediaRecorder(ctx) else MediaRecorder()
                             mr.apply { setAudioSource(MediaRecorder.AudioSource.MIC); setOutputFormat(MediaRecorder.OutputFormat.MPEG_4); setAudioEncoder(MediaRecorder.AudioEncoder.AAC); setOutputFile(f.absolutePath); prepare(); start() }
                             recorder = mr; isRecording = true
-                        } catch (e: Exception) { Toast.makeText(ctx, "Erreur micro", Toast.LENGTH_SHORT).show() }
+                        } catch (e: Exception) {}
                     } else {
                         try { recorder?.stop(); recorder?.release() } catch (e: Exception) {}
                         isRecording = false
                         audioFile?.let { tmp ->
-                            try {
-                                val dest = File(ctx.filesDir, "${realThreadId}_voice_${System.currentTimeMillis()}.m4a")
-                                tmp.copyTo(dest, overwrite = true)
-                                localFiles = localFiles + dest
-                            } catch (e: Exception) {}
+                            val dest = File(ctx.filesDir, "${realThreadId}_voice_${System.currentTimeMillis()}.m4a")
+                            tmp.copyTo(dest, overwrite = true)
+                            localFiles = localFiles + dest
                         }
                         showAttachSheet = false
                     }
@@ -195,14 +163,9 @@ fun MessageDetailScreen(threadId: Long, address: String, onBack: () -> Unit, onA
     }
     if (showThemeSheet) {
         ModalBottomSheet(onDismissRequest = { showThemeSheet = false }) {
-            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text("Thème", style = MaterialTheme.typography.titleMedium)
+            Column(Modifier.padding(16.dp)) {
                 ChatThemes.all.forEach { t ->
-                    Row(Modifier.fillMaxWidth().padding(12.dp)) {
-                        Surface(Modifier.size(24.dp), color = t.avatar, shape = RoundedCornerShape(12.dp)) {}
-                        Spacer(Modifier.width(12.dp))
-                        TextButton(onClick = { themeRepo.setTheme(address, t.id); theme = t; showThemeSheet = false }) { Text(t.name) }
-                    }
+                    TextButton(onClick = { themeRepo.setTheme(address, t.id); theme = t; showThemeSheet = false }) { Text(t.name) }
                 }
                 Spacer(Modifier.height(20.dp))
             }
