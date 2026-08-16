@@ -1,122 +1,73 @@
 package com.smsg.data.repository
-import android.app.role.RoleManager
+import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
-import android.os.Build
 import android.provider.ContactsContract
-import android.provider.Settings
 import android.provider.Telephony
 import android.telephony.SmsManager
 import com.smsg.data.model.Conversation
 import com.smsg.data.model.Message
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
-class SmsRepository(private val context: Context) {
-    fun isDefaultSmsApp(): Boolean = Telephony.Sms.getDefaultSmsPackage(context) == context.packageName
-    fun getDefaultIntent(): Intent {
-        return try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                val rm = context.getSystemService(RoleManager::class.java)
-                rm.createRequestRoleIntent(RoleManager.ROLE_SMS)
-            } else {
-                Intent(Telephony.Sms.Intents.ACTION_CHANGE_DEFAULT).putExtra(Telephony.Sms.Intents.EXTRA_PACKAGE_NAME, context.packageName)
-            }
-        } catch (e: Exception) {
-            Intent(Telephony.Sms.Intents.ACTION_CHANGE_DEFAULT).putExtra(Telephony.Sms.Intents.EXTRA_PACKAGE_NAME, context.packageName)
-        }
-    }
-    fun getSettingsIntent(): Intent = Intent(Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS)
-    fun getOrCreateThreadId(address: String): Long {
-        return try { Telephony.Threads.getOrCreateThreadId(context, address) } catch (e: Exception) { 0L }
-    }
+class SmsRepository(private val ctx: Context) {
+    fun isDefaultSmsApp(): Boolean = Telephony.Sms.getDefaultSmsPackage(ctx) == ctx.packageName
+    fun getDefaultIntent(): Intent = Intent(Telephony.Sms.Intents.ACTION_CHANGE_DEFAULT).putExtra(Telephony.Sms.Intents.EXTRA_PACKAGE_NAME, ctx.packageName)
     fun getContactName(phone: String): String? {
         return try {
             val uri = Uri.withAppendedPath(ContactsContract.PhoneLookup.CONTENT_FILTER_URI, Uri.encode(phone))
-            val cur = context.contentResolver.query(uri, arrayOf(ContactsContract.PhoneLookup.DISPLAY_NAME), null, null, null)
-            cur?.use { if (it.moveToFirst()) it.getString(0) else null }
+            ctx.contentResolver.query(uri, arrayOf(ContactsContract.PhoneLookup.DISPLAY_NAME), null, null, null)?.use { if (it.moveToFirst()) it.getString(0) else null }
         } catch (e: Exception) { null }
     }
-    suspend fun getConversations(): List<Conversation> = withContext(Dispatchers.IO) {
-        val map = linkedMapOf<Long, Conversation>()
+    fun getOrCreateThreadId(address: String): Long { return try { Telephony.Threads.getOrCreateThreadId(ctx, address) } catch (e: Exception) { System.currentTimeMillis() } }
+    fun getConversations(): List<Conversation> {
+        val map = LinkedHashMap<Long, Conversation>()
         try {
-            val uri = Telephony.Sms.CONTENT_URI
-            val proj = arrayOf(Telephony.Sms.THREAD_ID, Telephony.Sms.ADDRESS, Telephony.Sms.BODY, Telephony.Sms.DATE)
-            val cur = context.contentResolver.query(uri, proj, null, null, "${Telephony.Sms.DATE} DESC")
-            cur?.use {
-                val idxThread = it.getColumnIndex(Telephony.Sms.THREAD_ID)
-                val idxAddr = it.getColumnIndex(Telephony.Sms.ADDRESS)
-                val idxBody = it.getColumnIndex(Telephony.Sms.BODY)
-                val idxDate = it.getColumnIndex(Telephony.Sms.DATE)
-                while (it.moveToNext()) {
-                    if (idxThread == -1) continue
-                    val threadId = it.getLong(idxThread)
-                    if (map.containsKey(threadId)) continue
-                    val address = if (idxAddr != -1) it.getString(idxAddr)?: "" else ""
-                    if (address.isBlank()) continue
-                    val body = if (idxBody != -1) it.getString(idxBody)?: "" else ""
-                    val date = if (idxDate != -1) it.getLong(idxDate) else System.currentTimeMillis()
-                    val name = getContactName(address)
-                    map[threadId] = Conversation(threadId, address, name, body, date, 0)
+            ctx.contentResolver.query(Telephony.Sms.CONTENT_URI, null, null, null, "${Telephony.Sms.DATE} DESC")?.use { c ->
+                val tIdx = c.getColumnIndex(Telephony.Sms.THREAD_ID); val aIdx = c.getColumnIndex(Telephony.Sms.ADDRESS)
+                val bIdx = c.getColumnIndex(Telephony.Sms.BODY); val dIdx = c.getColumnIndex(Telephony.Sms.DATE)
+                while (c.moveToNext()) {
+                    val tid = if (tIdx>=0) c.getLong(tIdx) else 0L
+                    if (map.containsKey(tid)) continue
+                    val addr = c.getString(aIdx)?: continue
+                    if (addr.isBlank()) continue
+                    val body = c.getString(bIdx)?: ""
+                    val date = if (dIdx>=0) c.getLong(dIdx) else 0L
+                    map[tid] = Conversation(tid, addr, getContactName(addr), body, date, 1)
                 }
             }
         } catch (e: Exception) {}
-        map.values.toList()
+        return map.values.toList()
     }
-    suspend fun getMessagesForThread(threadId: Long, address: String): List<Message> = withContext(Dispatchers.IO) {
-        val realId = if (threadId == 0L) getOrCreateThreadId(address) else threadId
+    fun getMessagesForThread(threadId: Long, address: String): List<Message> {
         val list = mutableListOf<Message>()
         try {
-            val uri = Telephony.Sms.CONTENT_URI
-            val sel = if (realId != 0L) "${Telephony.Sms.THREAD_ID} =?" else "${Telephony.Sms.ADDRESS} =?"
-            val args = if (realId != 0L) arrayOf(realId.toString()) else arrayOf(address)
-            val cur = context.contentResolver.query(uri, null, sel, args, "${Telephony.Sms.DATE} ASC")
-            cur?.use {
-                val idxId = it.getColumnIndex(Telephony.Sms._ID)
-                val idxThread = it.getColumnIndex(Telephony.Sms.THREAD_ID)
-                val idxAddr = it.getColumnIndex(Telephony.Sms.ADDRESS)
-                val idxBody = it.getColumnIndex(Telephony.Sms.BODY)
-                val idxDate = it.getColumnIndex(Telephony.Sms.DATE)
-                val idxType = it.getColumnIndex(Telephony.Sms.TYPE)
-                val idxRead = it.getColumnIndex(Telephony.Sms.READ)
-                while (it.moveToNext()) {
-                    val id = if (idxId != -1) it.getLong(idxId) else 0L
-                    val tId = if (idxThread != -1) it.getLong(idxThread) else realId
-                    val addr = if (idxAddr != -1) it.getString(idxAddr)?: "" else ""
-                    val body = if (idxBody != -1) it.getString(idxBody)?: "" else ""
-                    val date = if (idxDate != -1) it.getLong(idxDate) else 0L
-                    val type = if (idxType != -1) it.getInt(idxType) else 1
-                    val read = if (idxRead != -1) it.getInt(idxRead) == 1 else true
-                    list.add(Message(id, tId, addr, body, date, type == 2, read, type))
+            val sel = if (threadId!=0L) "${Telephony.Sms.THREAD_ID}=$threadId" else "${Telephony.Sms.ADDRESS}=?"
+            val args = if (threadId!=0L) null else arrayOf(address)
+            ctx.contentResolver.query(Telephony.Sms.CONTENT_URI, null, sel, args, "${Telephony.Sms.DATE} ASC")?.use { c ->
+                val idIdx = c.getColumnIndex(Telephony.Sms._ID); val tIdx = c.getColumnIndex(Telephony.Sms.THREAD_ID)
+                val aIdx = c.getColumnIndex(Telephony.Sms.ADDRESS); val bIdx = c.getColumnIndex(Telephony.Sms.BODY)
+                val dIdx = c.getColumnIndex(Telephony.Sms.DATE); val tyIdx = c.getColumnIndex(Telephony.Sms.TYPE)
+                val rIdx = c.getColumnIndex(Telephony.Sms.READ)
+                while (c.moveToNext()) {
+                    val id = c.getLong(idIdx); val tid = if (tIdx>=0) c.getLong(tIdx) else threadId
+                    val addr = c.getString(aIdx)?: address; val body = c.getString(bIdx)?: ""
+                    val date = c.getLong(dIdx); val type = c.getInt(tyIdx); val read = if (rIdx>=0) c.getInt(rIdx)==1 else true
+                    list.add(Message(id, tid, addr, body, date, type==Telephony.Sms.MESSAGE_TYPE_SENT, read))
                 }
             }
         } catch (e: Exception) {}
-        list
+        return list
     }
     fun sendSms(address: String, body: String) {
         try {
-            SmsManager.getDefault().sendTextMessage(address, null, body, null, null)
-            if (!isDefaultSmsApp()) {
-                val values = android.content.ContentValues().apply {
-                    put(Telephony.Sms.ADDRESS, address)
-                    put(Telephony.Sms.BODY, body)
-                    put(Telephony.Sms.DATE, System.currentTimeMillis())
-                    put(Telephony.Sms.TYPE, Telephony.Sms.MESSAGE_TYPE_SENT)
-                    put(Telephony.Sms.READ, 1)
-                }
-                try { context.contentResolver.insert(Telephony.Sms.Sent.CONTENT_URI, values) } catch (e: Exception) {}
+            val mgr = ctx.getSystemService(SmsManager::class.java)?: SmsManager.getDefault()
+            val parts = mgr.divideMessage(body)
+            if (parts.size>1) mgr.sendMultipartTextMessage(address, null, parts, null, null) else mgr.sendTextMessage(address, null, body, null, null)
+            val v = ContentValues().apply {
+                put(Telephony.Sms.ADDRESS, address); put(Telephony.Sms.BODY, body); put(Telephony.Sms.DATE, System.currentTimeMillis())
+                put(Telephony.Sms.TYPE, Telephony.Sms.MESSAGE_TYPE_SENT); put(Telephony.Sms.READ, 1); put(Telephony.Sms.THREAD_ID, getOrCreateThreadId(address))
             }
-        } catch (e: Exception) {}
-    }
-    fun deleteMessage(msgId: Long): Boolean {
-        return try { context.contentResolver.delete(Telephony.Sms.CONTENT_URI, "${Telephony.Sms._ID}=?", arrayOf(msgId.toString())) > 0 } catch (e: Exception) { false }
-    }
-    fun deleteThread(threadId: Long, address: String): Boolean {
-        return try {
-            val realId = if (threadId == 0L) getOrCreateThreadId(address) else threadId
-            context.contentResolver.delete(Telephony.Sms.CONTENT_URI, "${Telephony.Sms.THREAD_ID}=?", arrayOf(realId.toString()))
-            context.contentResolver.delete(Uri.parse("content://mms-sms/conversations/$realId"), null, null)
-            true
-        } catch (e: Exception) { false }
+            try { ctx.contentResolver.insert(Telephony.Sms.Sent.CONTENT_URI, v) } catch (e: Exception) { ctx.contentResolver.insert(Telephony.Sms.CONTENT_URI, v) }
+            ctx.sendBroadcast(Intent("com.smsg.NEW_SMS").setPackage(ctx.packageName))
+        } catch (e: Exception) { e.printStackTrace() }
     }
 }

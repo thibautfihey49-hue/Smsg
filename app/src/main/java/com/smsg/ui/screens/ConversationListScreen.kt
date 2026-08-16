@@ -39,13 +39,13 @@ fun ConversationListScreen(onConversationClick: (Long, String) -> Unit, onNewMes
     var convs by remember { mutableStateOf<List<Conversation>>(emptyList()) }
     var isDefault by remember { mutableStateOf(true) }
     val scope = rememberCoroutineScope()
-    val lifecycleOwner = LocalLifecycleOwner.current
+    val owner = LocalLifecycleOwner.current
     suspend fun load(){ convs = repo.getConversations(); isDefault = repo.isDefaultSmsApp() }
     LaunchedEffect(Unit){ load() }
-    DisposableEffect(lifecycleOwner){
-        val obs = LifecycleEventObserver { _, e -> if (e==Lifecycle.Event.ON_RESUME) scope.launch { load() } }
-        lifecycleOwner.lifecycle.addObserver(obs)
-        onDispose { lifecycleOwner.lifecycle.removeObserver(obs) }
+    DisposableEffect(owner){
+        val obs = LifecycleEventObserver { _, e -> if (e==Lifecycle.Event.ON_RESUME) scope.launch{ load() } }
+        owner.lifecycle.addObserver(obs)
+        onDispose { owner.lifecycle.removeObserver(obs) }
     }
     DisposableEffect(Unit){
         val observer = object : ContentObserver(Handler(Looper.getMainLooper())){ override fun onChange(c: Boolean){ scope.launch{ load() } } }
@@ -54,22 +54,19 @@ fun ConversationListScreen(onConversationClick: (Long, String) -> Unit, onNewMes
         ctx.registerReceiver(br, IntentFilter("com.smsg.NEW_SMS"), Context.RECEIVER_NOT_EXPORTED)
         onDispose { ctx.contentResolver.unregisterContentObserver(observer); ctx.unregisterReceiver(br) }
     }
-    Column(Modifier.fillMaxSize()) {
-        if (!isDefault) {
-            Card(Modifier.fillMaxWidth().padding(12.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFFE3F2FD))) {
+    Column(Modifier.fillMaxSize()){
+        if (!isDefault){
+            Card(Modifier.fillMaxWidth().padding(12.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFFE3F2FD))){
                 Column(Modifier.padding(12.dp)){
-                    Text("Faire de Smsg votre app SMS par défaut comme Signal", fontWeight = FontWeight.Bold, color = SignalBlue)
-                    Spacer(Modifier.height(8.dp))
-                    Button(onClick = { try{ ctx.startActivity(repo.getDefaultIntent()) }catch(e:Exception){} }, colors = ButtonDefaults.buttonColors(containerColor = SignalBlue)) { Text("Définir par défaut") }
+                    Text("Définir comme app SMS par défaut (style Signal)", fontWeight = FontWeight.Bold, color = SignalBlue)
+                    Button(onClick = { try{ ctx.startActivity(repo.getDefaultIntent()) }catch(e:Exception){} }, colors = ButtonDefaults.buttonColors(containerColor = SignalBlue), modifier = Modifier.padding(top=8.dp)){ Text("Définir") }
                 }
             }
         }
-        LazyColumn(Modifier.weight(1f)) {
-            items(convs) { c ->
-                Row(Modifier.fillMaxWidth().combinedClickable(onClick = { onConversationClick(c.id, c.address) }).padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Surface(Modifier.size(48.dp).clip(CircleShape), color = SignalBlue) {
-                        Box(contentAlignment = Alignment.Center){ Text((c.contactName?.firstOrNull()?:c.address.firstOrNull()?: "?").toString().uppercase(), color = Color.White, fontWeight = FontWeight.Bold) }
-                    }
+        LazyColumn(Modifier.weight(1f)){
+            items(convs){ c ->
+                Row(Modifier.fillMaxWidth().combinedClickable(onClick = { onConversationClick(c.id, c.address) }).padding(12.dp), verticalAlignment = Alignment.CenterVertically){
+                    Surface(Modifier.size(48.dp).clip(CircleShape), color = SignalBlue){ Box(contentAlignment = Alignment.Center){ Text((c.contactName?.firstOrNull()?:c.address.firstOrNull()?: "?").toString().uppercase(), color = Color.White, fontWeight = FontWeight.Bold) } }
                     Spacer(Modifier.width(12.dp))
                     Column(Modifier.weight(1f)){
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween){
@@ -79,7 +76,7 @@ fun ConversationListScreen(onConversationClick: (Long, String) -> Unit, onNewMes
                         Text(c.snippet, maxLines = 1, color = Color.Gray, style = MaterialTheme.typography.bodySmall)
                     }
                 }
-                HorizontalDivider(color = Color(0xFFE0E0E0), thickness = 0.5.dp)
+                HorizontalDivider(thickness = 0.5.dp, color = Color(0xFFE0E0E0))
             }
         }
     }
