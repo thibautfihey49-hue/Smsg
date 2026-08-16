@@ -143,7 +143,7 @@ fun MessageDetailScreen(threadId: Long, address: String, onBack: () -> Unit, onA
         }
     ) { pad ->
         LazyColumn(Modifier.padding(pad).fillMaxSize().padding(8.dp)) {
-            item { Surface(shape = RoundedCornerShape(8.dp), color = Color(0xFFFFF9C4), modifier = Modifier.align(Alignment.CenterHorizontally).padding(8.dp)) { Text("🔒 Messages chiffrés de bout en bout • Mode SMS", style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(8.dp)) } }
+            item { Surface(shape = RoundedCornerShape(8.dp), color = Color(0xFFFFF9C4), modifier = Modifier.padding(8.dp)) { Text("🔒 Messages chiffrés de bout en bout • Mode SMS", style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(8.dp)) } }
             items(msgs) { m ->
                 val isMe = m.isMe
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = if (isMe) Arrangement.End else Arrangement.Start) {

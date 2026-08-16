@@ -7,6 +7,7 @@ import android.database.ContentObserver
 import android.os.Handler
 import android.os.Looper
 import android.provider.Telephony
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -30,6 +31,7 @@ import com.smsg.ui.theme.SignalBlue
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun ConversationListScreen(onConversationClick: (Long, String) -> Unit, onNewMessageClick: () -> Unit, onAddContactClick: (String) -> Unit) {
     val ctx = LocalContext.current
