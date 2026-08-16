@@ -1,45 +1,17 @@
 package com.smsg.ui.screens
-import android.widget.Toast
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
-import com.smsg.data.repository.ContactsRepository
-import kotlinx.coroutines.launch
-
+import com.smsg.ui.theme.GmBlue
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AddContactScreen(initialPhone: String = "", onBack: () -> Unit, onSaved: () -> Unit) {
-    val ctx = LocalContext.current
-    val repo = remember { ContactsRepository(ctx) }
-    var name by remember { mutableStateOf("") }
-    var phone by remember { mutableStateOf(initialPhone) }
-    val scope = rememberCoroutineScope()
-    var saving by remember { mutableStateOf(false) }
-    Scaffold(topBar = { TopAppBar(title = { Text("Ajouter contact") }, navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, null) } }) }) { pad ->
-        Column(Modifier.padding(pad).padding(16.dp).fillMaxSize(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Nom *") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-            OutlinedTextField(value = phone, onValueChange = { phone = it }, label = { Text("Numéro *") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-            Spacer(Modifier.height(16.dp))
-            Button(onClick = {
-                scope.launch {
-                    saving = true
-                    val ok = repo.addContact(name.trim(), phone.trim())
-                    saving = false
-                    if (ok) {
-                        Toast.makeText(ctx, "Contact ajouté", Toast.LENGTH_SHORT).show()
-                        onSaved()
-                    } else {
-                        Toast.makeText(ctx, "Erreur permissions", Toast.LENGTH_LONG).show()
-                    }
-                }
-            }, enabled = name.isNotBlank() && phone.isNotBlank() && !saving, modifier = Modifier.fillMaxWidth()) {
-                Text(if (saving) "Enregistrement..." else "Enregistrer")
-            }
-        }
+fun AddContactScreen(onBack: () -> Unit) {
+    Scaffold(topBar = { TopAppBar(title = { Text("Ajouter contact", color = Color.White) }, navigationIcon = { IconButton(onClick = onBack){ Icon(Icons.Default.ArrowBack, null, tint = Color.White) } }, colors = TopAppBarDefaults.topAppBarColors(containerColor = GmBlue)) }) { pad ->
+        Box(Modifier.padding(pad).padding(16.dp)) { Text("Contact") }
     }
 }
