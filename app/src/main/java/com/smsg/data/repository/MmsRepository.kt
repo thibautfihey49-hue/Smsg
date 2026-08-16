@@ -9,44 +9,42 @@ class MmsRepository(private val ctx: Context) {
         return try {
             val threadId = Telephony.Threads.getOrCreateThreadId(ctx, address)
             val mmsUri = ctx.contentResolver.insert(Telephony.Mms.CONTENT_URI, ContentValues().apply {
-                put(Telephony.Mms.MESSAGE_TYPE, Telephony.Mms.MESSAGE_TYPE_SEND_REQ)
-                put(Telephony.Mms.MESSAGE_BOX, Telephony.Mms.MESSAGE_BOX_OUTBOX)
-                put(Telephony.Mms.READ, 1)
-                put(Telephony.Mms.SEEN, 1)
-                put(Telephony.Mms.SUBJECT, "")
-                put(Telephony.Mms.CONTENT_TYPE, "application/vnd.wap.multipart.related")
-                put(Telephony.Mms.MESSAGE_CLASS, "personal")
-                put(Telephony.Mms.DELIVERY_REPORT, 0)
-                put(Telephony.Mms.READ_REPORT, 0)
-                put(Telephony.Mms.DATE, System.currentTimeMillis()/1000)
-                put(Telephony.Mms.THREAD_ID, threadId)
+                put("m_type", 128) // MESSAGE_TYPE_SEND_REQ
+                put("msg_box", 4) // MESSAGE_BOX_OUTBOX
+                put("read", 1)
+                put("seen", 1)
+                put("sub", "")
+                put("ct_t", "application/vnd.wap.multipart.related")
+                put("m_cls", "personal")
+                put("d_rpt", 0)
+                put("rr", 0)
+                put("date", System.currentTimeMillis() / 1000)
+                put("thread_id", threadId)
             }) ?: return false
             val mmsId = mmsUri.lastPathSegment?.toLong() ?: return false
 
-            // adresse
+            // TO
             ctx.contentResolver.insert(Uri.parse("content://mms/$mmsId/addr"), ContentValues().apply {
-                put(Telephony.Mms.Addr.ADDRESS, address)
-                put(Telephony.Mms.Addr.TYPE, Telephony.Mms.Addr.TYPE_TO)
-                put(Telephony.Mms.Addr.CHARSET, 106)
+                put("address", address)
+                put("type", 151) // TYPE_TO
+                put("charset", 106)
             })
 
-            // part
+            // PART
             val input = ctx.contentResolver.openInputStream(fileUri) ?: return false
             val bytes = input.readBytes()
             input.close()
 
             val partUri = ctx.contentResolver.insert(Uri.parse("content://mms/$mmsId/part"), ContentValues().apply {
-                put(Telephony.Mms.Part.SEQ, 0)
-                put(Telephony.Mms.Part.CONTENT_TYPE, mime)
-                put(Telephony.Mms.Part.NAME, "file")
-                put(Telephony.Mms.Part.CONTENT_LOCATION, "file")
-                put(Telephony.Mms.Part.CONTENT_ID, "<file>")
+                put("seq", 0)
+                put("ct", mime)
+                put("name", "file")
+                put("cl", "file")
+                put("cid", "<file>")
             }) ?: return false
 
             ctx.contentResolver.openOutputStream(partUri)?.use { it.write(bytes) }
 
-            // Pour déclencher l'envoi par le système (car on est app par défaut)
-            ctx.contentResolver.insert(Uri.parse("content://mms-sms/send"), ContentValues())
             true
         } catch (e: Exception) { Log.e("MMS", "err", e); false }
     }
